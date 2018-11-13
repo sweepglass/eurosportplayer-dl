@@ -9,14 +9,17 @@ import os
 keys_dict = dict()
 resolution = "1280x720"
 
-def decryptFile(fn, key, IV, ofn):
-    with open(fn, 'rb') as fileh:
-        ciphertext = fileh.read()            
+def decryptStream(ciphertext, key, IV, ofn):
     mode = AES.MODE_CBC
     decryptor = AES.new(key, mode, IV=IV)
     plain = decryptor.decrypt(ciphertext)
     with open(ofn, 'wb') as fileh:
         fileh.write(plain)
+
+#def decryptFile(fn, key, IV, ofn):
+#    with open(fn, 'rb') as fileh:
+#        ciphertext = fileh.read()            
+#    decryptStream(ciphertext, key, IV, ofn)
 
 def unpadBase64(s):
     while s[-1]=='=':
@@ -51,13 +54,14 @@ def getKey(video_url, key_url, authorization):
         'referer':video_url,
         'accept-language':'en-US,en;q=0.9,it-IT;q=0.8,it;q=0.7,de;q=0.6,nl;q=0.5,es;q=0.4,ar;q=0.3,pt;q=0.2,fr;q=0.1,ko;q=0.1,sl;q=0.1,cs;q=0.1,fy;q=0.1,tr;q=0.1'
     }
-    r = requests.get(key_url, headers=headers)    
-    with open(okeyfile, 'wb') as fd:
-        for chunk in r.iter_content(chunk_size=128):
-            fd.write(chunk)   
-    with open(okeyfile, 'rb') as fileh:
-        key = fileh.read()
-    return key
+    r = requests.get(key_url, headers=headers, stream=True)    
+    #with open(okeyfile, 'wb') as fd:
+    #    for chunk in r.iter_content(chunk_size=128):
+    #        fd.write(chunk)   
+    #with open(okeyfile, 'rb') as fileh:
+    #    key = fileh.read()
+    #return key
+    return r.content
 
 def downloadFile(url, fn):
     r = requests.get(url)
@@ -65,6 +69,9 @@ def downloadFile(url, fn):
         for chunk in r.iter_content(chunk_size=128):
             fd.write(chunk)
             
+def downloadFileRaw(url):
+    r = requests.get(url, stream=True)
+    return r.content
             
 def procPlaylist(plfn, base_frame_url, access_token):
     framen = 0
@@ -107,12 +114,14 @@ def procPlaylist(plfn, base_frame_url, access_token):
         frame_url = frame[0]
         key = frame[1]
         iv = frame[2]
-        print("Frame {}/{}".format(framen, frame_count))
         #print("Downloading frame file: "+frame_url)
-        out_enc = "./video_enc/"+str(framen)+".ts"
         out_dec = "./video_dec/"+str(framen)+".mp4"
-        downloadFile(frame_url, out_enc)
-        decryptFile(out_enc, key, iv, out_dec)
+        if os.path.isfile(out_dec):
+            print("Skipping")
+            continue
+        print("Frame {}/{}".format(framen, frame_count))
+        cont = downloadFileRaw(frame_url)
+        decryptStream(cont, key, iv, out_dec)
         framen += 1
 
 
@@ -120,7 +129,6 @@ def procPlaylist(plfn, base_frame_url, access_token):
 #MAIN
 os.makedirs("./temp",exist_ok=True)
 os.makedirs("./video_dec", exist_ok=True)
-os.makedirs("./video_enc", exist_ok=True)
 
 print("Please insert your eurosportplayer.com credentials")
 email=input("Email: ")
