@@ -1,3 +1,10 @@
+*.json
+*.ts
+*.mp4
+/temp/*
+/video_dec/*
+/video_enc/*
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
