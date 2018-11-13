@@ -7,6 +7,7 @@ import re
 import os
 
 keys_dict = dict()
+resolution = "1280x720"
 
 def decryptFile(fn, key, IV, ofn):
     with open(fn, 'rb') as fileh:
@@ -230,14 +231,11 @@ print("*"*10+" STEP 3 "+"*"*10)
 
 url = "https://eu.edge.bamgrid.com/idp/login"
 
-#global_bearer = "eyJraWQiOiJmNGFiODVjZS0yYjMyLTQ3NGItYjNhNC1mZDBhZWVjZGJiODAiLCJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJiZTUxNzA2OC1mMzI4LTQ5MjAtYWNhMy04NTI0YzRlMzc2MmYiLCJuYmYiOjE1NDE5Njk2NjIsInBhcnRuZXJOYW1lIjoiZXVyb3Nwb3J0IiwiaXNzIjoidXJuOmJhbXRlY2g6c2VydmljZTp0b2tlbiIsImNvbnRleHQiOnsidmVyc2lvbiI6IlYyLjAuMCIsImlkIjoiZjc2OWY0OTAtZTVmMy0xMWU4LWFlZmItMDI0MmFjMTEwMDA3IiwicGFydG5lciI6eyJuYW1lIjoiZXVyb3Nwb3J0In0sInR5cGUiOiJBTk9OWU1PVVMiLCJpcF9hZGRyZXNzIjoiOTMuMTQ2LjE0My43MyIsImRldmljZSI6eyJpZCI6ImJlNTE3MDY4LWYzMjgtNDkyMC1hY2EzLTg1MjRjNGUzNzYyZiIsInBsYXRmb3JtIjoiYnJvd3NlciJ9LCJsb2NhdGlvbiI6eyJ0eXBlIjoiWklQX0NPREUiLCJ6aXBfY29kZSI6IjIwMTMzIiwiY291bnRyeV9jb2RlIjoiaXQiLCJkbWEiOi0xLjB9LCJwcm9maWxlcyI6W3siYWN0aXZlIjp0cnVlLCJ0eXBlIjoidXJuOmJhbXRlY2g6cHJvZmlsZSIsImlkIjoiZDBkN2I1ZjQtYTk3Zi00NWY5LWJhN2ItMTg2ODVlYTg2ZDAwIiwicGFyZW50YWxfY29udHJvbHMiOnsiZW5hYmxlZCI6ZmFsc2V9fV0sImdlbmVyYXRlZF9vbiI6IjIwMTgtMTEtMTFUMjA6NTQ6MjIuNTUzKzAwMDAiLCJ1cGRhdGVkX29uIjoiMjAxOC0xMS0xMVQyMDo1NDoyMi41NTMrMDAwMCIsImV4cGlyZXNfb24iOiIyMDE4LTExLTEyVDAwOjU0OjIyLjU1MyswMDAwIiwibWVkaWFfcGVybWlzc2lvbnMiOnsiZW50aXRsZW1lbnRzIjpbXSwicnVsZXMiOnsicGFzc2VkIjpbXX0sImRhdGEiOnt9fSwiYmxhY2tvdXRzIjp7InJ1bGVzIjp7InZpb2xhdGVkIjpbXX0sImRhdGEiOnt9fX0sInNlc3Npb25JZCI6ImY3NjlmNDkwLWU1ZjMtMTFlOC1hZWZiLTAyNDJhYzExMDAwNyIsImV4cCI6MTU0MTk4NDA2MiwiZW52IjoicHJvZCIsImlhdCI6MTU0MTk2OTY2MiwianRpIjoiZjc2OWY0OTEtZTVmMy0xMWU4LWFlZmItMDI0MmFjMTEwMDA3In0.wxBLcFVJqNVV98aA3OdQOpqK15-1fKsxzeAmhzKfDy4"
-global_bearer = access_token
-
 headers={
     'Host':'eu.edge.bamgrid.com',
     'origin':'https://it.eurosportplayer.com',
     'x-bamsdk-version':'3.3',
-    'authorization':'Bearer '+global_bearer,
+    'authorization':'Bearer '+access_token,
     'content-type':'application/json; charset=UTF-8',
     'x-bamsdk-platform':'linux',
     'accept':'application/json; charset=utf-8',
@@ -270,7 +268,7 @@ headers={
     'Host':'eu.edge.bamgrid.com',
     'origin':'https://it.eurosportplayer.com',
     'x-bamsdk-version':'3.3',
-    'authorization':'Bearer '+global_bearer,
+    'authorization':'Bearer '+access_token,
     'content-type':'application/json; charset=UTF-8',
     'x-bamsdk-platform':'linux',
     'accept':'application/json; charset=utf-8',
@@ -350,7 +348,7 @@ master_file = "master.m3u8"
 downloadFile(master_url, master_file)
 with open(master_file, "r") as fileh:
     for line in fileh:
-        if line.startswith("#EXT-X-STREAM-INF:RESOLUTION=1280x720"):
+        if line.startswith("#EXT-X-STREAM-INF:RESOLUTION="+resolution):
             print("resolution found!")
             
             remote_file = fileh.readline()
