@@ -5,10 +5,80 @@ from collections import OrderedDict
 from Crypto.Cipher import AES
 import re
 import os
+import urllib
+import time
 
 keys_dict = dict()
 resolution = "1280x720"
+esp_url = 'https://it.eurosportplayer.com/en/event/ax-armani-exchange-milano-cska-moscow-euro-league/a78b0afc-90a2-46de-b83c-a05cd97f2ad8'
 
+def getVideoMetadata(esp_url, authorization, title, contentID):
+    headers = {
+        'Host':'search-api.svcs.eurosportplayer.com',
+        'x-bamsdk-version':'3.3',
+        'accept':'application/json',
+        'x-bamsdk-platform':'linux',
+        'origin':'https://it.eurosportplayer.com',
+        'authorization':'Bearer '+authorization,
+        'user-agent':'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/70.0.3538.77 Safari/537.36',
+        'referer':esp_url,
+        'accept-language':'en-US,en;q=0.9,it-IT;q=0.8,it;q=0.7,de;q=0.6,nl;q=0.5,es;q=0.4,ar;q=0.3,pt;q=0.2,fr;q=0.1,ko;q=0.1,sl;q=0.1,cs;q=0.1,fy;q=0.1,tr;q=0.1'
+    }
+    
+    url='https://search-api.svcs.eurosportplayer.com/svc/search/v2/graphql/persisted/query/eurosport/Airings'
+        
+    data = {
+        "preferredLanguages":["en","it"],
+        "mediaRights":["GeoMediaRight"],
+        "uiLang":"en",
+        "include_images":1,
+        "pageType":"event",
+        "title":title,
+        "contentId":contentID
+    }
+    
+    data_str = json.dumps(data, separators=(',', ':'))
+    print("data_str='"+data_str+"'")
+    data_enc = urllib.parse.quote_plus(data_str)
+    print("data_enc='"+data_enc+"'")
+    
+    r = requests.get(url, headers=headers, params="variables="+data_str)
+    pretty_print_POST(r.request)
+    print(r.text)
+    rj = r.json()
+    
+    eventId = rj['data']['Airings'][0]['eventId']
+    
+    mediaId = rj['data']['Airings'][0]['mediaId']
+    
+    print("eventId='"+eventId+"'")
+    print("mediaId='"+mediaId+"'")
+    
+    return {'eventId':eventId,'mediaId':mediaId}
+    
+def getMasterFile(esp_url, metadata, authorization):
+    
+    mediaId = metadata['mediaId']
+    
+    headers={
+        'Host':'global-api.svcs.eurosportplayer.com',
+        'x-bamsdk-version':'3.3',
+        'accept':'application/vnd.media-service+json; version=2',
+        'x-bamsdk-platform':'linux',
+        'origin':'https://it.eurosportplayer.com',
+        'authorization':authorization,
+        'user-agent':'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/70.0.3538.77 Safari/537.36',
+        'referer':esp_url,
+        'accept-language':'en-US,en;q=0.9,it-IT;q=0.8,it;q=0.7,de;q=0.6,nl;q=0.5,es;q=0.4,ar;q=0.3,pt;q=0.2,fr;q=0.1,ko;q=0.1,sl;q=0.1,cs;q=0.1,fy;q=0.1,tr;q=0.1'
+    }
+     
+    url='https://global-api.svcs.eurosportplayer.com/media/'+mediaId+'/scenarios/browser'
+    
+    r = requests.get(url, headers=headers)
+    rj = r.json()
+    #print(rj)
+    return rj['stream']['complete']
+              
 def decryptStream(ciphertext, key, IV, ofn):
     mode = AES.MODE_CBC
     decryptor = AES.new(key, mode, IV=IV)
@@ -43,7 +113,7 @@ def pretty_print_POST(req):
     ))
 
 
-def getKey(video_url, key_url, authorization):
+def getKey(esp_url, key_url, authorization):
     okeyfile = "./temp/key.bin"
     headers = {
         'Host':'drm-api.svcs.eurosportplayer.com',
@@ -51,7 +121,7 @@ def getKey(video_url, key_url, authorization):
         'origin':'https://it.eurosportplayer.com',
         'user-agent':'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/70.0.3538.77 Safari/537.36',
         'accept':'*/*',
-        'referer':video_url,
+        'referer':esp_url,
         'accept-language':'en-US,en;q=0.9,it-IT;q=0.8,it;q=0.7,de;q=0.6,nl;q=0.5,es;q=0.4,ar;q=0.3,pt;q=0.2,fr;q=0.1,ko;q=0.1,sl;q=0.1,cs;q=0.1,fy;q=0.1,tr;q=0.1'
     }
     r = requests.get(key_url, headers=headers, stream=True)    
@@ -73,12 +143,12 @@ def downloadFileRaw(url):
     r = requests.get(url, stream=True)
     return r.content
             
-def procPlaylist(plfn, base_frame_url, access_token):
-    framen = 0
+def procPlaylist(esp_url, plfn, base_frame_url, access_token):
     iv = 0
     key = 0
     frames=list()
     
+    # Build list of files
     with open(plfn, "r") as plfh:
         for line in plfh:
             if line.startswith("#EXT-X-KEY:"):
@@ -90,7 +160,7 @@ def procPlaylist(plfn, base_frame_url, access_token):
                     if key_url in keys_dict:
                         key = keys_dict[key_url]
                     else:
-                        key = getKey(video_url, key_url, access_token)
+                        key = getKey(esp_url, key_url, access_token)
                         keys_dict[key_url] = key
                         #print("key="+str(key))
                 else:
@@ -109,33 +179,46 @@ def procPlaylist(plfn, base_frame_url, access_token):
                 frame_url = base_frame_url + line
                 frames.append([frame_url, key, iv])
 
+    # Download video frames
     frame_count = len(frames)
+    start_time = time.perf_counter()
+    frames_down = 0
+    
     for framen, frame in enumerate(frames):
         frame_url = frame[0]
         key = frame[1]
         iv = frame[2]
         #print("Downloading frame file: "+frame_url)
-        out_dec = "./video_dec/"+str(framen)+".mp4"
+        out_dec = "./download/videos/"+str(framen)+".mp4"
         if os.path.isfile(out_dec):
             print("Skipping")
             continue
-        print("Frame {}/{}".format(framen, frame_count))
+            
+        elapsed_time = round(time.perf_counter() - start_time,2)
+        frames_rem = frame_count-framen
+            
+        if frames_down != 0:
+            exp_time = (elapsed_time/frames_down) * frames_rem
+            exp_time = round(exp_time,2)
+        else:
+            exp_time = 0
+            
+        print("Frame {}/{} -- Elapsed {} -- Exp. Remaining {} -- Frames Rem. {}".format(framen, frame_count, elapsed_time, exp_time, frames_rem))
         cont = downloadFileRaw(frame_url)
         decryptStream(cont, key, iv, out_dec)
-        framen += 1
+        frames_down += 1
 
 
 
 #MAIN
-os.makedirs("./temp",exist_ok=True)
-os.makedirs("./video_dec", exist_ok=True)
+os.makedirs("./download/stream",exist_ok=True)
+os.makedirs("./download/videos", exist_ok=True)
 
 print("Please insert your eurosportplayer.com credentials")
 email=input("Email: ")
 password=input("Password: ")
 
-master_url = "https://hlsevent-l3c.ams1.media.eurosportplayer.com/token=exp=1542197105~id=2f50b49c-48d9-4312-84b1-0c9c39b55ff3~hash=ef4cb5a1517a5caee0832ee01fae1cdf8ecfe3ea/ls01/eurosport/event/2018/11/12/VL_Pesaro_Alma_Trieste_DA_20181112_1541974031753/master_desktop_complete-trimmed.m3u8"
-video_url = 'https://it.eurosportplayer.com/en/event/vl-pesaro-alma-trieste/8b317d7e-cd3b-471e-804b-128639eae81f'
+
 
 #*********************************************************#
 # 1. Get clientApiKey
@@ -285,7 +368,8 @@ headers={
     'accept-language':'en-US,en;q=0.9,it-IT;q=0.8,it;q=0.7,de;q=0.6,nl;q=0.5,es;q=0.4,ar;q=0.3,pt;q=0.2,fr;q=0.1,ko;q=0.1,sl;q=0.1,cs;q=0.1,fy;q=0.1,tr;q=0.1' 
 }
 
-data='{"id_token":"'+id_token+'"}'
+#uses the id_token (obtained by logging in)
+data = '{"id_token":"' + id_token + '"}'
 
 r = requests.post(url, headers=headers,data=data)
 rj = r.json()
@@ -309,7 +393,7 @@ headers = {
     'Host':'eu.edge.bamgrid.com',
     'origin':'https://it.eurosportplayer.com',
     'x-bamsdk-version':'3.3',
-    'authorization':'Bearer 4K0redryzbpsShVgneLaVp9AMh0b0sguXS4CtSuG9dC4vSeo9kzyjCW3mV7jfqPd',
+    'authorization':'Bearer '+clientApiKey,
     'content-type':'application/x-www-form-urlencoded',
     'x-bamsdk-platform':'linux',
     'accept':'application/json',
@@ -347,14 +431,35 @@ expires_in = rj['expires_in']
 print("\n expires_in=\""+str(expires_in)+"\"\n")
 
 #*********************************************************#
-# 7. Download playlist
+# 6. Get metadata and master file
 #*********************************************************#
-
 print("*"*10+" STEP 6 "+"*"*10)
 
-master_file = "master.m3u8"
-downloadFile(master_url, master_file)
-with open(master_file, "r") as fileh:
+pos2 = esp_url.rfind("/")
+pos1 = esp_url.rfind("/",0,pos2-1)
+#print(pos2)
+#print(pos1)
+title = esp_url[pos1+1:pos2]
+contentID = esp_url[pos2+1:]
+print("Title='"+title+"'")
+print("contentID='"+contentID+"'")
+
+metadata = getVideoMetadata(esp_url, access_token, title, contentID)
+master_url = getMasterFile(esp_url, metadata, access_token)
+
+#print("metadata="+metadata)
+print("masterfile_url="+master_url)
+
+#*********************************************************#
+# 7. Download video frames
+#*********************************************************#
+
+print("*"*10+" STEP 7 "+"*"*10)
+
+master_local = "./download/stream/master.m3u8"
+downloadFile(master_url, master_local)
+
+with open(master_local, "r") as fileh:
     for line in fileh:
         if line.startswith("#EXT-X-STREAM-INF:RESOLUTION="+resolution):
             print("resolution found!")
@@ -363,13 +468,13 @@ with open(master_file, "r") as fileh:
             print("Remote playlist file: "+remote_file)
             playlist_url = master_url.replace("master_desktop_complete-trimmed.m3u8","") + remote_file
 
-            local_file = "frames.m3u8"
-            if os.path.isfile(local_file):
-                os.remove(local_file)
-            downloadFile(playlist_url, local_file)
+            local_playlist_file = "./download/stream/frames.m3u8"
+            if os.path.isfile(local_playlist_file):
+                os.remove(local_playlist_file)
+            downloadFile(playlist_url, local_playlist_file)
             
             frame_baseurl = master_url.replace("master_desktop_complete-trimmed.m3u8","") + remote_file[:remote_file.find("/")+1]
             print("frame_baseurl="+frame_baseurl)
-            procPlaylist(local_file, frame_baseurl, access_token)
+            procPlaylist(esp_url, local_playlist_file, frame_baseurl, access_token)
 
 
