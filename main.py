@@ -19,6 +19,12 @@ verbose=False
 
 frames_downloaded=None
 
+def lookahead_line(fileh):
+    line = fileh.readline()
+    count = len(line) + 1
+    fileh.seek(-count, 1)
+    return fileh, line
+
 class Counter(object):
     def __init__(self):
         self.val = mp.Value('i', 0)
@@ -258,7 +264,7 @@ if __name__=="__main__":
     parser.add_argument('esp_url', metavar='URL', help='URL of the video')
     parser.add_argument('--user', '-u', dest='username', help='Username (typically an e-mail address) of the eurosportplayer account', required=True)
     parser.add_argument('--password', '-p', dest='password', help='Password of the eurosportplayer account', required=True)
-    parser.add_argument('--resolution', '-r', default='1280x720', help='Resolution of the video to download')
+    parser.add_argument('--resolution', '-r', default='c', help='Resolution of the video to download')
     
     parser.add_argument('--continue', dest='continuedown', action='store_true', help='Continue the previous download')
     parser.add_argument('--overwrite', action='store_true', help='Delete the previous download')
@@ -528,35 +534,64 @@ if __name__=="__main__":
 
     master_local = "./download/stream/master.m3u8"
     downloadFile(master_url, master_local)
+    
+    streams_list = []
+    master_file = None
 
     with open(master_local, "r") as fileh:
-        for line in fileh:
-            if line.startswith("#EXT-X-STREAM-INF:RESOLUTION="+resolution):
-                print("The requested resolution was found in them master file!")
-                
-                playlist_url_rel = fileh.readline()
-                if debug:
-                    print("Remote playlist relative URL: "+playlist_url_rel)
-                playlist_url = master_url.replace("master_desktop_complete-trimmed.m3u8","") + playlist_url_rel
+        master_file = fileh.readlines()   
+    
+    for linen, line in enumerate(master_file):
+        if line.startswith("#EXT-X-STREAM-INF:RESOLUTION="):
+            
+            resolution = re.search('RESOLUTION=(.*),AVERAGE', line, re.IGNORECASE)
+            if(resolution is None):
+                print("ERROR: resolution is none")
+                print(line)
+                exit()  
+            resolution = resolution.group(1)
+            
+            stream_url = None
+            url_search = re.search('URI="(.*)"', line, re.IGNORECASE)
+            if url_search:
+                stream_url = url_search.group(1)
+            else:
+                next_line = master_file[linen+1]
+                if next_line[0] != "#":
+                    stream_url = next_line.replace("\n","")
+            assert(stream_url is not None)    
+            streams_list.append([resolution, stream_url])
+    
+    for i, stream in enumerate(streams_list):
+        res = stream[0]
+        url=stream[1]
+        print(str(i)+". "+ res + " - URL: "+url)
+    streamn = input("Choose a stream: ")  
+    streamn = int(streamn)              
+            
+    playlist_url_rel = streams_list[streamn][1]
+    if debug:
+        print("Remote playlist relative URL: "+playlist_url_rel)
+    playlist_url = master_url.replace("master_desktop_complete-trimmed.m3u8","") + playlist_url_rel
 
-                local_playlist_file = "./download/stream/frames.m3u8"
-                if os.path.isfile(local_playlist_file):
-                    #print("ERROR: Ploaylist file already exist")
-                    #exit()
-                    os.remove(local_playlist_file)
-                downloadFile(playlist_url, local_playlist_file)
-                
-                frame_baseurl = master_url.replace("master_desktop_complete-trimmed.m3u8","") + playlist_url_rel[:playlist_url_rel.find("/")+1]
-                if debug:
-                    print("frame_baseurl="+frame_baseurl)
-                frames_to_download = procPlaylist(esp_url, local_playlist_file, frame_baseurl, access_token, args)
-                
-                frames_count = len(frames_to_download) + frames_downloaded.val.value
-                
-                pool = mp.Pool(processes=nprocesses)
-                results = pool.map(downloadVideoFrame, frames_to_download)
-                
-                print("Video downloaded")
+    local_playlist_file = "./download/stream/frames.m3u8"
+    if os.path.isfile(local_playlist_file):
+        #print("ERROR: Ploaylist file already exist")
+        #exit()
+        os.remove(local_playlist_file)
+    downloadFile(playlist_url, local_playlist_file)
+    
+    frame_baseurl = master_url.replace("master_desktop_complete-trimmed.m3u8","") + playlist_url_rel[:playlist_url_rel.find("/")+1]
+    if debug:
+        print("frame_baseurl="+frame_baseurl)
+    frames_to_download = procPlaylist(esp_url, local_playlist_file, frame_baseurl, access_token, args)
+    
+    frames_count = len(frames_to_download) + frames_downloaded.val.value
+    
+    pool = mp.Pool(processes=nprocesses)
+    results = pool.map(downloadVideoFrame, frames_to_download)
+    
+    print("Video downloaded")
                 
     print("ERROR: Resolution not found in master file")
 
