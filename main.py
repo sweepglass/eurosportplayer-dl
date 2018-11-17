@@ -11,6 +11,7 @@ import time
 keys_dict = dict()
 resolution = "1280x720"
 esp_url = 'https://it.eurosportplayer.com/en/event/ax-armani-exchange-milano-cska-moscow-euro-league/a78b0afc-90a2-46de-b83c-a05cd97f2ad8'
+user_agent = 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/70.0.3538.77 Safari/537.36'
 
 def getVideoMetadata(esp_url, authorization, title, contentID):
     headers = {
@@ -20,7 +21,7 @@ def getVideoMetadata(esp_url, authorization, title, contentID):
         'x-bamsdk-platform':'linux',
         'origin':'https://it.eurosportplayer.com',
         'authorization':'Bearer '+authorization,
-        'user-agent':'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/70.0.3538.77 Safari/537.36',
+        'user-agent':user_agent,
         'referer':esp_url,
         'accept-language':'en-US,en;q=0.9,it-IT;q=0.8,it;q=0.7,de;q=0.6,nl;q=0.5,es;q=0.4,ar;q=0.3,pt;q=0.2,fr;q=0.1,ko;q=0.1,sl;q=0.1,cs;q=0.1,fy;q=0.1,tr;q=0.1'
     }
@@ -67,7 +68,7 @@ def getMasterFile(esp_url, metadata, authorization):
         'x-bamsdk-platform':'linux',
         'origin':'https://it.eurosportplayer.com',
         'authorization':authorization,
-        'user-agent':'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/70.0.3538.77 Safari/537.36',
+        'user-agent':user_agent,
         'referer':esp_url,
         'accept-language':'en-US,en;q=0.9,it-IT;q=0.8,it;q=0.7,de;q=0.6,nl;q=0.5,es;q=0.4,ar;q=0.3,pt;q=0.2,fr;q=0.1,ko;q=0.1,sl;q=0.1,cs;q=0.1,fy;q=0.1,tr;q=0.1'
     }
@@ -114,12 +115,11 @@ def pretty_print_POST(req):
 
 
 def getKey(esp_url, key_url, authorization):
-    okeyfile = "./temp/key.bin"
     headers = {
         'Host':'drm-api.svcs.eurosportplayer.com',
         'authorization':authorization,
         'origin':'https://it.eurosportplayer.com',
-        'user-agent':'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/70.0.3538.77 Safari/537.36',
+        'user-agent':user_agent,
         'accept':'*/*',
         'referer':esp_url,
         'accept-language':'en-US,en;q=0.9,it-IT;q=0.8,it;q=0.7,de;q=0.6,nl;q=0.5,es;q=0.4,ar;q=0.3,pt;q=0.2,fr;q=0.1,ko;q=0.1,sl;q=0.1,cs;q=0.1,fy;q=0.1,tr;q=0.1'
@@ -251,7 +251,7 @@ headers={
     'content-type':'application/x-www-form-urlencoded',
     'x-bamsdk-platform':'linux',
     'accept':'application/json',
-    'user-agent':'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/70.0.3538.77 Safari/537.36',
+    'user-agent':user_agent,
     'referer':'https://it.eurosportplayer.com/en/login',
     'accept-language':'en-US,en;q=0.9,it-IT;q=0.8,it;q=0.7,de;q=0.6,nl;q=0.5,es;q=0.4,ar;q=0.3,pt;q=0.2,fr;q=0.1,ko;q=0.1,sl;q=0.1,cs;q=0.1,fy;q=0.1,tr;q=0.1'
 }
@@ -301,17 +301,16 @@ r = requests.post(url, headers=headers, data=data)
 
 rj = r.json()
 
-with open("step2.json", "w") as fileh:
-    json.dump(rj, fileh, sort_keys = True, indent = 4, ensure_ascii = False)
+if debug:
+    with open("step2.json", "w") as fileh:
+        json.dump(rj, fileh, sort_keys = True, indent = 4, ensure_ascii = False)
     
 access_token = rj['access_token']
-print("\n access_token=\""+access_token+"\"\n")
-
+#print("\n access_token=\""+access_token+"\"\n")
 refresh_token = rj['refresh_token']
-print("\n refresh_token=\""+refresh_token+"\"\n")
-
+#print("\n refresh_token=\""+refresh_token+"\"\n")
 expires_in = rj['expires_in']
-print("\n expires_in=\""+str(expires_in)+"\"\n")
+#print("\n expires_in=\""+str(expires_in)+"\"\n")
 
 
 #*********************************************************#
@@ -330,7 +329,7 @@ headers={
     'content-type':'application/json; charset=UTF-8',
     'x-bamsdk-platform':'linux',
     'accept':'application/json; charset=utf-8',
-    'user-agent':'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/70.0.3538.77 Safari/537.36',
+    'user-agent':user_agent,
     'referer':'https://it.eurosportplayer.com/en/login',
     'accept-language':'en-US,en;q=0.9,it-IT;q=0.8,it;q=0.7,de;q=0.6,nl;q=0.5,es;q=0.4,ar;q=0.3,pt;q=0.2,fr;q=0.1,ko;q=0.1,sl;q=0.1,cs;q=0.1,fy;q=0.1,tr;q=0.1' 
 }
@@ -340,12 +339,13 @@ payload='{"email":"'+email+'","password":"'+password+'"}'
 r = requests.post(url, headers=headers,data=payload)
 rj = r.json()
 
-with open("step3.json", "w") as fileh:
-    json.dump(rj, fileh, sort_keys = True, indent = 4, ensure_ascii = False)
+if debug:
+    with open("step3.json", "w") as fileh:
+        json.dump(rj, fileh, sort_keys = True, indent = 4, ensure_ascii = False)
 
 id_token = r.json()['id_token']
-print("id_token="+id_token)
-print("\n")
+#print("id_token="+id_token)
+#print("\n")
 
 #*********************************************************#
 # 4. Login (get assertion)
@@ -363,7 +363,7 @@ headers={
     'content-type':'application/json; charset=UTF-8',
     'x-bamsdk-platform':'linux',
     'accept':'application/json; charset=utf-8',
-    'user-agent':'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/70.0.3538.77 Safari/537.36',
+    'user-agent':user_agent,
     'referer':'https://it.eurosportplayer.com/en/login',
     'accept-language':'en-US,en;q=0.9,it-IT;q=0.8,it;q=0.7,de;q=0.6,nl;q=0.5,es;q=0.4,ar;q=0.3,pt;q=0.2,fr;q=0.1,ko;q=0.1,sl;q=0.1,cs;q=0.1,fy;q=0.1,tr;q=0.1' 
 }
@@ -374,8 +374,9 @@ data = '{"id_token":"' + id_token + '"}'
 r = requests.post(url, headers=headers,data=data)
 rj = r.json()
 
-with open("step4.json", "w") as fileh:
-    json.dump(rj, fileh, sort_keys = True, indent = 4, ensure_ascii = False)
+if debug:
+    with open("step4.json", "w") as fileh:
+        json.dump(rj, fileh, sort_keys = True, indent = 4, ensure_ascii = False)
 
 assertion = r.json()['assertion']
 print("assertion="+assertion)
@@ -397,7 +398,7 @@ headers = {
     'content-type':'application/x-www-form-urlencoded',
     'x-bamsdk-platform':'linux',
     'accept':'application/json',
-    'user-agent':'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/70.0.3538.77 Safari/537.36',
+    'user-agent':user_agent,
     'referer':'https://it.eurosportplayer.com/en/login',
     'accept-language':'en-US,en;q=0.9,it-IT;q=0.8,it;q=0.7,de;q=0.6,nl;q=0.5,es;q=0.4,ar;q=0.3,pt;q=0.2,fr;q=0.1,ko;q=0.1,sl;q=0.1,cs;q=0.1,fy;q=0.1,tr;q=0.1'
 }
@@ -418,17 +419,16 @@ r = requests.post(url, headers=headers, data=data)
 
 rj = r.json()
 
-with open("step5.json", "w") as fileh:
-    json.dump(rj, fileh, sort_keys = True, indent = 4, ensure_ascii = False)
+if debug:
+    with open("step5.json", "w") as fileh:
+        json.dump(rj, fileh, sort_keys = True, indent = 4, ensure_ascii = False)
     
 access_token = rj['access_token']
-print("\n access_token=\""+access_token+"\"\n")
-
+#print("\n access_token=\""+access_token+"\"\n")
 refresh_token = rj['refresh_token']
-print("\n refresh_token=\""+refresh_token+"\"\n")
-
+#print("\n refresh_token=\""+refresh_token+"\"\n")
 expires_in = rj['expires_in']
-print("\n expires_in=\""+str(expires_in)+"\"\n")
+#print("\n expires_in=\""+str(expires_in)+"\"\n")
 
 #*********************************************************#
 # 6. Get metadata and master file
@@ -441,14 +441,16 @@ pos1 = esp_url.rfind("/",0,pos2-1)
 #print(pos1)
 title = esp_url[pos1+1:pos2]
 contentID = esp_url[pos2+1:]
-print("Title='"+title+"'")
-print("contentID='"+contentID+"'")
+
+if verbose:
+    print("Title='"+title+"'")
+    print("contentID='"+contentID+"'")
 
 metadata = getVideoMetadata(esp_url, access_token, title, contentID)
 master_url = getMasterFile(esp_url, metadata, access_token)
 
-#print("metadata="+metadata)
-print("masterfile_url="+master_url)
+if verbose:
+    print("masterfile_url="+master_url)
 
 #*********************************************************#
 # 7. Download video frames
@@ -462,7 +464,7 @@ downloadFile(master_url, master_local)
 with open(master_local, "r") as fileh:
     for line in fileh:
         if line.startswith("#EXT-X-STREAM-INF:RESOLUTION="+resolution):
-            print("resolution found!")
+            print("The requested resolution was found in them master file!")
             
             remote_file = fileh.readline()
             print("Remote playlist file: "+remote_file)
