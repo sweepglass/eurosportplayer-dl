@@ -9,6 +9,7 @@ import urllib
 import time
 import argparse
 import multiprocessing as mp
+import sys
 
 keys_dict = dict()
 frames_count = 0
@@ -162,8 +163,13 @@ def downloadFile(url, fn):
             
 
 def downloadFileRaw(url):
+    if verbose:
+        print("requests.get")
     r = requests.get(url, stream=True)
-    return r.content
+    if verbose:
+        print("r.content")
+    cont = r.content
+    return cont
 
 
 def procPlaylist(esp_url, plfn, base_frame_url, access_token, args):
@@ -221,17 +227,26 @@ def procPlaylist(esp_url, plfn, base_frame_url, access_token, args):
 
 def downloadVideoFrame(frame_data):
     global frames_downloaded
+    global frames_count
+    
     frame_url = frame_data[0]
     key = frame_data[1]
     iv = frame_data[2]
     framen = frame_data[3]
-    #print("Downloading frame file: "+frame_url)
     out_dec = "./download/videos/"+str(framen)+".mp4"
-    frames_downloaded_n = frames_downloaded.val.value
-    print("Downloading frame {}/{} (total downloaded {} - {:.2%})".format(framen, frames_count, frames_downloaded_n, frames_downloaded_n/frames_count))
+
+    #print("Downloading frame {}/{} (total downloaded {} - {:.2%})".format(framen, frames_count, frames_downloaded_n, frames_downloaded_n/frames_count))
     fcont=downloadFileRaw(frame_url)
+    if debug:
+        print("Decrypting...")
     decryptStream(fcont, key, iv, out_dec)
     frames_downloaded.increment()
+    frames_downloaded_n = frames_downloaded.val.value
+    
+    perc = frames_downloaded_n / frames_count
+    done = int(50 * perc)
+    sys.stdout.write("\r[{}{}] {:.2%}".format('=' * done, ' ' * (50-done), perc))    
+    sys.stdout.flush()
 
 
 #MAIN
@@ -534,12 +549,12 @@ if __name__=="__main__":
                 frame_baseurl = master_url.replace("master_desktop_complete-trimmed.m3u8","") + playlist_url_rel[:playlist_url_rel.find("/")+1]
                 if debug:
                     print("frame_baseurl="+frame_baseurl)
-                frames = procPlaylist(esp_url, local_playlist_file, frame_baseurl, access_token, args)
+                frames_to_download = procPlaylist(esp_url, local_playlist_file, frame_baseurl, access_token, args)
                 
-                frames_count = len(frames)
+                frames_count = len(frames_to_download) + frames_downloaded.val.value
                 
                 pool = mp.Pool(processes=nprocesses)
-                results = pool.map(downloadVideoFrame, frames)
+                results = pool.map(downloadVideoFrame, frames_to_download)
                 
                 print("Video downloaded")
                 
