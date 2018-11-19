@@ -9,7 +9,9 @@ import urllib
 import time
 import argparse
 import multiprocessing as mp
+from multiprocessing import Value, Lock
 import sys
+import shutil
 
 keys_dict = dict()
 frames_count = 0
@@ -17,25 +19,25 @@ user_agent = 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Ge
 debug = False
 verbose=False
 
-frames_downloaded=None
+class Counter(object):
+    def __init__(self, initval=0):
+        self.val = Value('i', initval)
+        self.lock = Lock()
 
+    def increment(self):
+        with self.lock:
+            self.val.value += 1
+        return self
+
+    def value(self):
+        with self.lock:
+            return self.val.value
+            
 def lookahead_line(fileh):
     line = fileh.readline()
     count = len(line) + 1
     fileh.seek(-count, 1)
     return fileh, line
-
-class Counter(object):
-    def __init__(self):
-        self.val = mp.Value('i', 0)
-
-    def increment(self, n=1):
-        with self.val.get_lock():
-            self.val.value += n
-
-    @property
-    def value(self):
-        return self.val.value
 
 def getVideoMetadata(esp_url, authorization, title, contentID):
     headers = {
@@ -178,9 +180,7 @@ def downloadFileRaw(url):
     return cont
 
 
-def procPlaylist(esp_url, plfn, base_frame_url, access_token, args):
-    
-    global frames_downloaded
+def procPlaylist(esp_url, plfn, base_frame_url, access_token, args, frames_counter):
     
     iv = 0
     key = 0
@@ -219,7 +219,7 @@ def procPlaylist(esp_url, plfn, base_frame_url, access_token, args):
                 if os.path.isfile(out_dec):
                     if args.continuedown:
                         print("Skipping frame {} (--continue argument passed)".format(framen))
-                        frames_downloaded.increment()                       
+                        frames_counter.increment()                       
                     else:
                         print("ERROR: frame already present and --continue argument was not passed. This should not happen!")
                         exit()
@@ -230,35 +230,43 @@ def procPlaylist(esp_url, plfn, base_frame_url, access_token, args):
                 framen += 1 #increase frame number in any case, also if we skipped the frame
                 
     return frames
+    
+frames_counter_pool = None
+frames_count_pool = None
+
+def init_creator_pool(counter, count):
+    global frames_counter_pool
+    frames_counter_pool = counter
+    
+    global frames_count_pool
+    frames_count_pool = count
 
 def downloadVideoFrame(frame_data):
-    global frames_downloaded
-    global frames_count
+    global frames_count_pool
+    global frames_counter_pool
     
     frame_url = frame_data[0]
     key = frame_data[1]
     iv = frame_data[2]
     framen = frame_data[3]
+        
     out_dec = "./download/videos/"+str(framen)+".mp4"
 
-    #print("Downloading frame {}/{} (total downloaded {} - {:.2%})".format(framen, frames_count, frames_downloaded_n, frames_downloaded_n/frames_count))
+    #print("Downloading frame {}/{} (total downloaded {} - {:.2%})".format(framen, frames_count_pool, frames_counter_n, frames_counter_n/frames_count_pool))
     fcont=downloadFileRaw(frame_url)
     if debug:
         print("Decrypting...")
-    decryptStream(fcont, key, iv, out_dec)
-    frames_downloaded.increment()
-    frames_downloaded_n = frames_downloaded.val.value
+    decryptStream(fcont, key, iv, out_dec)    
     
-    perc = frames_downloaded_n / frames_count
+    counter_n = frames_counter_pool.increment().value()
+    
+    perc = counter_n / frames_count_pool
     done = int(50 * perc)
     sys.stdout.write("\r[{}{}] {:.2%}".format('=' * done, ' ' * (50-done), perc))    
     sys.stdout.flush()
 
-
 #MAIN
 if __name__=="__main__":
-    
-    frames_downloaded = Counter()
     
     parser = argparse.ArgumentParser(description='Download videos from eurosportplayer.com')
     parser.add_argument('esp_url', metavar='URL', help='URL of the video')
@@ -275,15 +283,14 @@ if __name__=="__main__":
     
     email=args.username
     password=args.password
-    resolution = args.resolution
     esp_url = args.esp_url   
     nprocesses = args.nprocesses
     
     if args.overwrite:
         if os.path.isdir("./download/stream"):
-            shutil.deltree("./download/stream")
+            shutil.rmtree("./download/stream")
         if os.path.isdir("./download/videos"):
-            shutil.deltree("./download/videos") 
+            shutil.rmtree("./download/videos") 
     
     if args.continuedown:
         os.makedirs("./download/stream", exist_ok=True)
@@ -535,7 +542,7 @@ if __name__=="__main__":
     master_local = "./download/stream/master.m3u8"
     downloadFile(master_url, master_local)
     
-    streams_list = []
+    streams_dict = dict()
     master_file = None
 
     with open(master_local, "r") as fileh:
@@ -560,16 +567,25 @@ if __name__=="__main__":
                 if next_line[0] != "#":
                     stream_url = next_line.replace("\n","")
             assert(stream_url is not None)    
-            streams_list.append([resolution, stream_url])
+            streams_dict[resolution] = stream_url
     
-    for i, stream in enumerate(streams_list):
-        res = stream[0]
-        url=stream[1]
-        print(str(i)+". "+ res + " - URL: "+url)
-    streamn = input("Choose a stream: ")  
-    streamn = int(streamn)              
-            
-    playlist_url_rel = streams_list[streamn][1]
+    playlist_url_rel = None
+    
+    if args.resolution=='c':
+        stream_map = list()
+        for i, (res, url) in enumerate(streams_dict.items()):
+            print(str(i)+". "+ res + " - URL: "+url)
+            stream_map.append(url)
+        streamn = input("Choose the stream you want: ")  
+        streamn = int(streamn)  
+        playlist_url_rel = stream_map[streamn]    
+        
+    else:
+        if args.resolution in streams_dict:
+            playlist_url_rel = streams_dict[args.resolution]
+        else:
+            print("ERROR: The resolution you want is not available")           
+
     if debug:
         print("Remote playlist relative URL: "+playlist_url_rel)
     playlist_url = master_url.replace("master_desktop_complete-trimmed.m3u8","") + playlist_url_rel
@@ -584,15 +600,15 @@ if __name__=="__main__":
     frame_baseurl = master_url.replace("master_desktop_complete-trimmed.m3u8","") + playlist_url_rel[:playlist_url_rel.find("/")+1]
     if debug:
         print("frame_baseurl="+frame_baseurl)
-    frames_to_download = procPlaylist(esp_url, local_playlist_file, frame_baseurl, access_token, args)
+        
+    frames_counter = Counter()
+    frames_to_download = procPlaylist(esp_url, local_playlist_file, frame_baseurl, access_token, args, frames_counter)    
+    frames_count = len(frames_to_download) + frames_counter.val.value
     
-    frames_count = len(frames_to_download) + frames_downloaded.val.value
+    pool = mp.Pool(initializer=init_creator_pool, initargs=(frames_counter,frames_count,), processes=nprocesses)
     
-    pool = mp.Pool(processes=nprocesses)
-    results = pool.map(downloadVideoFrame, frames_to_download)
+    i = pool.map(downloadVideoFrame, frames_to_download)
     
     print("Video downloaded")
-                
-    print("ERROR: Resolution not found in master file")
 
 
