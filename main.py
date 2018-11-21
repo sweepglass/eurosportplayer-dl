@@ -12,7 +12,8 @@ import multiprocessing as mp
 from multiprocessing import Value, Lock
 import sys
 import shutil
-
+import jsonpickle
+        
 keys_dict = dict()
 frames_count = 0
 user_agent = 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/70.0.3538.77 Safari/537.36'
@@ -77,15 +78,23 @@ def getVideoMetadata(esp_url, authorization, title, contentID):
         print(r.text)
     rj = r.json()
     
+    with open("./download/metadata.json","w") as fileh:
+        fileh.write(json.dumps(rj, sort_keys=True, indent="\t"))
+    
     eventId = rj['data']['Airings'][0]['eventId']
     
     mediaId = rj['data']['Airings'][0]['mediaId']
+    
+    titles = rj['data']['Airings'][0]['titles']
+    
+    episode_name = titles['episodeName']
+    title = titles['title']
     
     if debug:
         print("eventId='"+eventId+"'")
         print("mediaId='"+mediaId+"'")
     
-    return {'eventId':eventId,'mediaId':mediaId}
+    return {'eventId':eventId, 'mediaId':mediaId, 'episodeName':episode_name, 'title':title}
     
 def getMasterFile(esp_url, metadata, authorization):
     
@@ -112,15 +121,11 @@ def getMasterFile(esp_url, metadata, authorization):
               
 def decryptStream(ciphertext, key, IV, ofn):
     mode = AES.MODE_CBC
+    #print("New AES: '{}', '{}', '{}'".format(key,mode,IV))
     decryptor = AES.new(key, mode, IV=IV)
     plain = decryptor.decrypt(ciphertext)
     with open(ofn, 'wb') as fileh:
         fileh.write(plain)
-
-#def decryptFile(fn, key, IV, ofn):
-#    with open(fn, 'rb') as fileh:
-#        ciphertext = fileh.read()            
-#    decryptStream(ciphertext, key, IV, ofn)
 
 def unpadBase64(s):
     while s[-1]=='=':
@@ -155,12 +160,6 @@ def getKey(esp_url, key_url, authorization):
         'accept-language':'en-US,en;q=0.9,it-IT;q=0.8,it;q=0.7,de;q=0.6,nl;q=0.5,es;q=0.4,ar;q=0.3,pt;q=0.2,fr;q=0.1,ko;q=0.1,sl;q=0.1,cs;q=0.1,fy;q=0.1,tr;q=0.1'
     }
     r = requests.get(key_url, headers=headers, stream=True)    
-    #with open(okeyfile, 'wb') as fd:
-    #    for chunk in r.iter_content(chunk_size=128):
-    #        fd.write(chunk)   
-    #with open(okeyfile, 'rb') as fileh:
-    #    key = fileh.read()
-    #return key
     return r.content
 
 def downloadFile(url, fn):
@@ -190,8 +189,10 @@ def procPlaylist(esp_url, plfn, base_frame_url, access_token, args, frames_count
     # Build list of files
     with open(plfn, "r") as plfh:
         for line in plfh:
+            if line.find("404 Not Found") != -1:
+                print("ERROR: stream not found!")
+                exit()
             if line.startswith("#EXT-X-KEY:"):
-                #print("New key!")
                 m = re.search('URI=\"(.+?)\"', line)
                 if m:
                     key_url = m.group(1)
@@ -214,7 +215,7 @@ def procPlaylist(esp_url, plfn, base_frame_url, access_token, args, frames_count
                     print("ERROR: iv file not found")
                     
             elif not line.startswith("#"):
-                #print("New video chunk!")
+                # New video chunk!
                 out_dec = "./download/videos/"+str(framen)+".mp4"
                 if os.path.isfile(out_dec):
                     if args.continuedown:
@@ -262,29 +263,17 @@ def downloadVideoFrame(frame_data):
     
     perc = counter_n / frames_count_pool
     done = int(50 * perc)
-    sys.stdout.write("\r[{}{}] {:.2%}".format('=' * done, ' ' * (50-done), perc))    
+    sys.stdout.write("\r[{}{}] {:.2%} ({}/{})".format('=' * done, ' ' * (50-done), perc, counter_n, frames_count_pool))    
     sys.stdout.flush()
 
-#MAIN
-if __name__=="__main__":
+def main(args):
     
-    parser = argparse.ArgumentParser(description='Download videos from eurosportplayer.com')
-    parser.add_argument('esp_url', metavar='URL', help='URL of the video')
-    parser.add_argument('--user', '-u', dest='username', help='Username (typically an e-mail address) of the eurosportplayer account', required=True)
-    parser.add_argument('--password', '-p', dest='password', help='Password of the eurosportplayer account', required=True)
-    parser.add_argument('--resolution', '-r', default='c', help='Resolution of the video to download')
-    
-    parser.add_argument('--continue', dest='continuedown', action='store_true', help='Continue the previous download')
-    parser.add_argument('--overwrite', action='store_true', help='Delete the previous download')
-    
-    parser.add_argument('--nprocesses', type=int, help='Number of parallel processes to use', default=1)
-    
-    args = parser.parse_args()
-    
-    email=args.username
-    password=args.password
+    email = args.username
+    password = args.password
     esp_url = args.esp_url   
     nprocesses = args.nprocesses
+    
+    assert(args.overwrite != args.continuedown)
     
     if args.overwrite:
         if os.path.isdir("./download/stream"):
@@ -568,7 +557,14 @@ if __name__=="__main__":
                     stream_url = next_line.replace("\n","")
             assert(stream_url is not None)    
             streams_dict[resolution] = stream_url
-    
+            
+            # Download the stream playlist (for debug purposes)
+            stream_url_full = master_url.replace("master_desktop_complete-trimmed.m3u8","") + stream_url
+            stream_name = stream_url[stream_url.find("/")+1:]
+            local_stream_file = "./download/stream/{}".format(stream_name)
+            downloadFile(stream_url_full, local_stream_file)
+            
+    # Choose which stream to download
     playlist_url_rel = None
     
     if args.resolution=='c':
@@ -586,6 +582,9 @@ if __name__=="__main__":
         else:
             print("ERROR: The resolution you want is not available")           
 
+    # Save configuration in file (in order to quickly resume the download later and remember the paramenters, like the URL, in order to resume the download
+    saveConfig(args)
+    
     if debug:
         print("Remote playlist relative URL: "+playlist_url_rel)
     playlist_url = master_url.replace("master_desktop_complete-trimmed.m3u8","") + playlist_url_rel
@@ -611,4 +610,40 @@ if __name__=="__main__":
     
     print("Video downloaded")
 
+def saveConfig(args):
+    frozen = jsonpickle.encode(args)
+    frozen = json.dumps(json.loads(frozen), indent="\t", sort_keys=True)
+    with open("last.json","w") as fileh:
+        fileh.write(frozen)  
+    
+#MAIN
+if __name__=="__main__":
+    
+    parser = argparse.ArgumentParser(description='Download videos from eurosportplayer.com')
+    parser.add_argument('--url', dest='esp_url', metavar='URL', help='URL of the video')
+    parser.add_argument('--user', '-u', dest='username', help='Username (typically an e-mail address) of the eurosportplayer account')
+    parser.add_argument('--password', '-p', dest='password', help='Password of the eurosportplayer account')
+    parser.add_argument('--resolution', '-r', default='c', help='Resolution of the video to download')
+    
+    parser.add_argument('--continue', dest='continuedown', action='store_true', help='Continue the previous download')
+    parser.add_argument('--overwrite', action='store_true', help='Delete the previous download')
+    
+    parser.add_argument('--nprocesses', type=int, help='Number of parallel processes to use', default=1)
+    
+    parser.add_argument('--load', action="store_true", help='Load from previous session')
+    
+    args = parser.parse_args()
+    
+    if (args.load):
+        print("Loading from file")
+        with open("last.json","r") as fileh:
+            args = jsonpickle.decode(fileh.read())
+        args.continuedown = True
+        args.overwrite = False
+        main(args)
+    
+    else:          
+        main(args)
+    
+    exit()
 
