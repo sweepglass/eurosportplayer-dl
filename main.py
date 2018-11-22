@@ -85,7 +85,7 @@ def getVideoMetadata(esp_url, authorization, title, contentID):
     
     mediaId = rj['data']['Airings'][0]['mediaId']
     
-    titles = rj['data']['Airings'][0]['titles']
+    titles = rj['data']['Airings'][0]['titles'][0]
     
     episode_name = titles['episodeName']
     title = titles['title']
