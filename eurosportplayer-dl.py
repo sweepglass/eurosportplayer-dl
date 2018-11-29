@@ -13,7 +13,7 @@ from multiprocessing import Value, Lock
 import sys
 import shutil
 import jsonpickle
-        
+
 keys_dict = dict()
 frames_count = 0
 user_agent = 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/70.0.3538.77 Safari/537.36'
@@ -33,7 +33,7 @@ class Counter(object):
     def value(self):
         with self.lock:
             return self.val.value
-            
+
 def lookahead_line(fileh):
     line = fileh.readline()
     count = len(line) + 1
@@ -52,9 +52,9 @@ def getVideoMetadata(esp_url, authorization, title, contentID):
         'referer':esp_url,
         'accept-language':'en-US,en;q=0.9,it-IT;q=0.8,it;q=0.7,de;q=0.6,nl;q=0.5,es;q=0.4,ar;q=0.3,pt;q=0.2,fr;q=0.1,ko;q=0.1,sl;q=0.1,cs;q=0.1,fy;q=0.1,tr;q=0.1'
     }
-    
+
     url='https://search-api.svcs.eurosportplayer.com/svc/search/v2/graphql/persisted/query/eurosport/Airings'
-        
+
     data = {
         "preferredLanguages":["en","it"],
         "mediaRights":["GeoMediaRight"],
@@ -64,42 +64,42 @@ def getVideoMetadata(esp_url, authorization, title, contentID):
         "title":title,
         "contentId":contentID
     }
-    
+
     data_str = json.dumps(data, separators=(',', ':'))
     if verbose:
         print("data_str='"+data_str+"'")
     data_enc = urllib.parse.quote_plus(data_str)
     if verbose:
         print("data_enc='"+data_enc+"'")
-    
+
     r = requests.get(url, headers=headers, params="variables="+data_str)
     if debug:
         pretty_print_POST(r.request)
         print(r.text)
     rj = r.json()
-    
+
     with open("./download/metadata.json","w") as fileh:
         fileh.write(json.dumps(rj, sort_keys=True, indent="\t"))
-    
+
     eventId = rj['data']['Airings'][0]['eventId']
-    
+
     mediaId = rj['data']['Airings'][0]['mediaId']
-    
+
     titles = rj['data']['Airings'][0]['titles'][0]
-    
+
     episode_name = titles['episodeName']
     title = titles['title']
-    
+
     if debug:
         print("eventId='"+eventId+"'")
         print("mediaId='"+mediaId+"'")
-    
+
     return {'eventId':eventId, 'mediaId':mediaId, 'episodeName':episode_name, 'title':title}
-    
+
 def getMasterFile(esp_url, metadata, authorization):
-    
+
     mediaId = metadata['mediaId']
-    
+
     headers={
         'Host':'global-api.svcs.eurosportplayer.com',
         'x-bamsdk-version':'3.3',
@@ -111,14 +111,14 @@ def getMasterFile(esp_url, metadata, authorization):
         'referer':esp_url,
         'accept-language':'en-US,en;q=0.9,it-IT;q=0.8,it;q=0.7,de;q=0.6,nl;q=0.5,es;q=0.4,ar;q=0.3,pt;q=0.2,fr;q=0.1,ko;q=0.1,sl;q=0.1,cs;q=0.1,fy;q=0.1,tr;q=0.1'
     }
-     
+
     url='https://global-api.svcs.eurosportplayer.com/media/'+mediaId+'/scenarios/browser'
-    
+
     r = requests.get(url, headers=headers)
     rj = r.json()
     #print(rj)
     return rj['stream']['complete']
-              
+
 def decryptStream(ciphertext, key, IV, ofn):
     mode = AES.MODE_CBC
     #print("New AES: '{}', '{}', '{}'".format(key,mode,IV))
@@ -137,8 +137,8 @@ def pretty_print_POST(req):
     At this point it is completely built and ready
     to be fired; it is "prepared".
 
-    However pay attention at the formatting used in 
-    this function because it is programmed to be pretty 
+    However pay attention at the formatting used in
+    this function because it is programmed to be pretty
     printed and may differ from the actual request.
     """
     print('{}\n{}\n{}\n\n{}'.format(
@@ -159,7 +159,7 @@ def getKey(esp_url, key_url, authorization):
         'referer':esp_url,
         'accept-language':'en-US,en;q=0.9,it-IT;q=0.8,it;q=0.7,de;q=0.6,nl;q=0.5,es;q=0.4,ar;q=0.3,pt;q=0.2,fr;q=0.1,ko;q=0.1,sl;q=0.1,cs;q=0.1,fy;q=0.1,tr;q=0.1'
     }
-    r = requests.get(key_url, headers=headers, stream=True)    
+    r = requests.get(key_url, headers=headers, stream=True)
     return r.content
 
 def downloadFile(url, fn):
@@ -167,7 +167,7 @@ def downloadFile(url, fn):
     with open(fn, 'wb') as fd:
         for chunk in r.iter_content(chunk_size=128):
             fd.write(chunk)
-            
+
 
 def downloadFileRaw(url):
     if verbose:
@@ -180,12 +180,12 @@ def downloadFileRaw(url):
 
 
 def procPlaylist(esp_url, plfn, base_frame_url, access_token, args, frames_counter):
-    
+
     iv = 0
     key = 0
     frames=list()
     framen = 0
-    
+
     # Build list of files
     with open(plfn, "r") as plfh:
         for line in plfh:
@@ -205,7 +205,7 @@ def procPlaylist(esp_url, plfn, base_frame_url, access_token, args, frames_count
                         #print("key="+str(key))
                 else:
                     print("ERROR: key file not found")
-                    
+
                 m = re.search('IV=(.+?)$', line)
                 if m:
                     iv_str = m.group(1).replace("0x","")
@@ -213,14 +213,14 @@ def procPlaylist(esp_url, plfn, base_frame_url, access_token, args, frames_count
                     iv = bytes.fromhex(iv_str)
                 else:
                     print("ERROR: iv file not found")
-                    
+
             elif not line.startswith("#"):
                 # New video chunk!
                 out_dec = "./download/videos/"+str(framen)+".mp4"
                 if os.path.isfile(out_dec):
                     if args.continuedown:
                         print("Skipping frame {} (--continue argument passed)".format(framen))
-                        frames_counter.increment()                       
+                        frames_counter.increment()
                     else:
                         print("ERROR: frame already present and --continue argument was not passed. This should not happen!")
                         exit()
@@ -229,66 +229,71 @@ def procPlaylist(esp_url, plfn, base_frame_url, access_token, args, frames_count
                     frame_url = base_frame_url + line
                     frames.append([frame_url, key, iv, framen])
                 framen += 1 #increase frame number in any case, also if we skipped the frame
-                
+
     return frames
-    
+
 frames_counter_pool = None
 frames_count_pool = None
 
 def init_creator_pool(counter, count):
     global frames_counter_pool
     frames_counter_pool = counter
-    
+
     global frames_count_pool
     frames_count_pool = count
 
 def downloadVideoFrame(frame_data):
     global frames_count_pool
     global frames_counter_pool
-    
+
     frame_url = frame_data[0]
     key = frame_data[1]
     iv = frame_data[2]
     framen = frame_data[3]
-        
+
     out_dec = "./download/videos/"+str(framen)+".mp4"
 
     #print("Downloading frame {}/{} (total downloaded {} - {:.2%})".format(framen, frames_count_pool, frames_counter_n, frames_counter_n/frames_count_pool))
     fcont=downloadFileRaw(frame_url)
     if debug:
         print("Decrypting...")
-    decryptStream(fcont, key, iv, out_dec)    
-    
+    decryptStream(fcont, key, iv, out_dec)
+
     counter_n = frames_counter_pool.increment().value()
-    
+
     perc = counter_n / frames_count_pool
     done = int(50 * perc)
-    sys.stdout.write("\r[{}{}] {:.2%} ({}/{})".format('=' * done, ' ' * (50-done), perc, counter_n, frames_count_pool))    
+    sys.stdout.write("\r[{}{}] {:.2%} ({}/{})".format('=' * done, ' ' * (50-done), perc, counter_n, frames_count_pool))
     sys.stdout.flush()
 
 def main(args):
-    
+
     email = args.username
-    password = args.password
-    esp_url = args.esp_url   
+    esp_url = args.esp_url
     nprocesses = args.nprocesses
-    
-    assert(args.overwrite != args.continuedown)
-    
+
+    try:
+        password = args.password
+    except AttributeError:
+        print("You need to provide a password for the account")
+        exit()
+
     if args.overwrite:
+        assert(args.continuedown is False)
         if os.path.isdir("./download/stream"):
             shutil.rmtree("./download/stream")
         if os.path.isdir("./download/videos"):
-            shutil.rmtree("./download/videos") 
-    
+            shutil.rmtree("./download/videos")
+
     if args.continuedown:
+        assert(args.overwrite is False)
         os.makedirs("./download/stream", exist_ok=True)
         os.makedirs("./download/videos", exist_ok=True)
     else:
         os.makedirs("./download/stream", exist_ok=False)
         os.makedirs("./download/videos", exist_ok=False)
 
-    
+
     #*********************************************************#
     # 1. Get clientApiKey
     #*********************************************************#
@@ -336,7 +341,7 @@ def main(args):
     st1_b64 = base64.b64encode(st1_str.encode("utf8")).decode("ascii")
     st1_b64 = unpadBase64(st1_b64) #remove "==" at the end, otherwise non-valid result
 
-    st2 = OrderedDict([ 
+    st2 = OrderedDict([
         ("sub", "be517068-f328-4920-aca3-8524c4e3762f"),
         ("aud", "urn:bamtech:service:token"),
         ("nbf", 1541262385),
@@ -345,7 +350,7 @@ def main(args):
         ("iat", 1541262385),
         ("jti", "a3d2cf6d-1119-4758-8727-e1c9cad9bfb0")
         ])
-        
+
     st2_str = json.dumps(st2, separators=(',', ':'))
     st2_b64 = base64.b64encode(st2_str.encode("ascii")).decode("ascii")
     st2_b64 = unpadBase64(st2_b64)
@@ -373,7 +378,7 @@ def main(args):
     if debug:
         with open("step2.json", "w") as fileh:
             json.dump(rj, fileh, sort_keys = True, indent = 4, ensure_ascii = False)
-        
+
     access_token = rj['access_token']
     #print("\n access_token=\""+access_token+"\"\n")
     refresh_token = rj['refresh_token']
@@ -400,7 +405,7 @@ def main(args):
         'accept':'application/json; charset=utf-8',
         'user-agent':user_agent,
         'referer':'https://it.eurosportplayer.com/en/login',
-        'accept-language':'en-US,en;q=0.9,it-IT;q=0.8,it;q=0.7,de;q=0.6,nl;q=0.5,es;q=0.4,ar;q=0.3,pt;q=0.2,fr;q=0.1,ko;q=0.1,sl;q=0.1,cs;q=0.1,fy;q=0.1,tr;q=0.1' 
+        'accept-language':'en-US,en;q=0.9,it-IT;q=0.8,it;q=0.7,de;q=0.6,nl;q=0.5,es;q=0.4,ar;q=0.3,pt;q=0.2,fr;q=0.1,ko;q=0.1,sl;q=0.1,cs;q=0.1,fy;q=0.1,tr;q=0.1'
     }
 
     payload='{"email":"'+email+'","password":"'+password+'"}'
@@ -434,7 +439,7 @@ def main(args):
         'accept':'application/json; charset=utf-8',
         'user-agent':user_agent,
         'referer':'https://it.eurosportplayer.com/en/login',
-        'accept-language':'en-US,en;q=0.9,it-IT;q=0.8,it;q=0.7,de;q=0.6,nl;q=0.5,es;q=0.4,ar;q=0.3,pt;q=0.2,fr;q=0.1,ko;q=0.1,sl;q=0.1,cs;q=0.1,fy;q=0.1,tr;q=0.1' 
+        'accept-language':'en-US,en;q=0.9,it-IT;q=0.8,it;q=0.7,de;q=0.6,nl;q=0.5,es;q=0.4,ar;q=0.3,pt;q=0.2,fr;q=0.1,ko;q=0.1,sl;q=0.1,cs;q=0.1,fy;q=0.1,tr;q=0.1'
     }
 
     #uses the id_token (obtained by logging in)
@@ -492,7 +497,7 @@ def main(args):
     if debug:
         with open("step5.json", "w") as fileh:
             json.dump(rj, fileh, sort_keys = True, indent = 4, ensure_ascii = False)
-        
+
     access_token = rj['access_token']
     #print("\n access_token=\""+access_token+"\"\n")
     refresh_token = rj['refresh_token']
@@ -530,23 +535,23 @@ def main(args):
 
     master_local = "./download/stream/master.m3u8"
     downloadFile(master_url, master_local)
-    
+
     streams_dict = dict()
     master_file = None
 
     with open(master_local, "r") as fileh:
-        master_file = fileh.readlines()   
-    
+        master_file = fileh.readlines()
+
     for linen, line in enumerate(master_file):
         if line.startswith("#EXT-X-STREAM-INF:RESOLUTION="):
-            
+
             resolution = re.search('RESOLUTION=(.*),AVERAGE', line, re.IGNORECASE)
             if(resolution is None):
                 print("ERROR: resolution is none")
                 print(line)
-                exit()  
+                exit()
             resolution = resolution.group(1)
-            
+
             stream_url = None
             url_search = re.search('URI="(.*)"', line, re.IGNORECASE)
             if url_search:
@@ -555,36 +560,37 @@ def main(args):
                 next_line = master_file[linen+1]
                 if next_line[0] != "#":
                     stream_url = next_line.replace("\n","")
-            assert(stream_url is not None)    
+            assert(stream_url is not None)
             streams_dict[resolution] = stream_url
-            
+
             # Download the stream playlist (for debug purposes)
             stream_url_full = master_url.replace("master_desktop_complete-trimmed.m3u8","") + stream_url
             stream_name = stream_url[stream_url.find("/")+1:]
             local_stream_file = "./download/stream/{}".format(stream_name)
             downloadFile(stream_url_full, local_stream_file)
-            
+
     # Choose which stream to download
     playlist_url_rel = None
-    
+
     if args.resolution=='c':
         stream_map = list()
         for i, (res, url) in enumerate(streams_dict.items()):
             print(str(i)+". "+ res + " - URL: "+url)
             stream_map.append(url)
-        streamn = input("Choose the stream you want: ")  
-        streamn = int(streamn)  
-        playlist_url_rel = stream_map[streamn]    
-        
+        streamn = input("Choose the stream you want: ")
+        streamn = int(streamn)
+        playlist_url_rel = stream_map[streamn]
+
     else:
         if args.resolution in streams_dict:
             playlist_url_rel = streams_dict[args.resolution]
         else:
-            print("ERROR: The resolution you want is not available")           
+            print("ERROR: The resolution you want is not available")
 
     # Save configuration in file (in order to quickly resume the download later and remember the paramenters, like the URL, in order to resume the download
     saveConfig(args)
-    
+
+    # Get the playlist of the video frames to download
     if debug:
         print("Remote playlist relative URL: "+playlist_url_rel)
     playlist_url = master_url.replace("master_desktop_complete-trimmed.m3u8","") + playlist_url_rel
@@ -595,55 +601,63 @@ def main(args):
         #exit()
         os.remove(local_playlist_file)
     downloadFile(playlist_url, local_playlist_file)
-    
+
     frame_baseurl = master_url.replace("master_desktop_complete-trimmed.m3u8","") + playlist_url_rel[:playlist_url_rel.find("/")+1]
     if debug:
         print("frame_baseurl="+frame_baseurl)
-        
+
     frames_counter = Counter()
-    frames_to_download = procPlaylist(esp_url, local_playlist_file, frame_baseurl, access_token, args, frames_counter)    
+    frames_to_download = procPlaylist(esp_url, local_playlist_file, frame_baseurl, access_token, args, frames_counter)
     frames_count = len(frames_to_download) + frames_counter.val.value
-    
+
     pool = mp.Pool(initializer=init_creator_pool, initargs=(frames_counter,frames_count,), processes=nprocesses)
-    
+
     i = pool.map(downloadVideoFrame, frames_to_download)
-    
+
     print("Video downloaded")
 
 def saveConfig(args):
+    del args.password
     frozen = jsonpickle.encode(args)
     frozen = json.dumps(json.loads(frozen), indent="\t", sort_keys=True)
     with open("last.json","w") as fileh:
-        fileh.write(frozen)  
-    
+        fileh.write(frozen)
+
 #MAIN
 if __name__=="__main__":
-    
+
     parser = argparse.ArgumentParser(description='Download videos from eurosportplayer.com')
-    parser.add_argument('--url', dest='esp_url', metavar='URL', help='URL of the video')
     parser.add_argument('--user', '-u', dest='username', help='Username (typically an e-mail address) of the eurosportplayer account')
     parser.add_argument('--password', '-p', dest='password', help='Password of the eurosportplayer account')
     parser.add_argument('--resolution', '-r', default='c', help='Resolution of the video to download')
-    
+
     parser.add_argument('--continue', dest='continuedown', action='store_true', help='Continue the previous download')
     parser.add_argument('--overwrite', action='store_true', help='Delete the previous download')
-    
-    parser.add_argument('--nprocesses', type=int, help='Number of parallel processes to use', default=1)
-    
-    parser.add_argument('--load', action="store_true", help='Load from previous session')
-    
-    args = parser.parse_args()
-    
-    if (args.load):
-        print("Loading from file")
-        with open("last.json","r") as fileh:
-            args = jsonpickle.decode(fileh.read())
-        args.continuedown = True
-        args.overwrite = False
-        main(args)
-    
-    else:          
-        main(args)
-    
-    exit()
 
+    parser.add_argument('--nprocesses', type=int, help='Number of parallel processes to use', default=1)
+
+    parser.add_argument('--verbose', help='Show more messages', action='store_true')
+
+    load_group = parser.add_mutually_exclusive_group(required=True)
+    load_group.add_argument('--load', action="store_true", help='Load from previous session')
+    load_group.add_argument('--url', dest='esp_url', metavar='URL', help='URL of the video')
+
+    args = parser.parse_args()
+
+    if (args.load):
+        if(args.verbose):
+            print("Reading configuration file")
+        with open("last.json","r") as fileh:
+            args2 = jsonpickle.decode(fileh.read())
+        args2.continuedown = True
+        args2.overwrite = False
+        if(args.password is None):
+            print("If you use the --load option, you still need to provide a password for the account using the --password option, since the password is not stored in the configuration file")
+            exit()
+        args2.password = args.password
+        main(args2)
+
+    else:
+        main(args)
+
+    exit()
