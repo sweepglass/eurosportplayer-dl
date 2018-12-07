@@ -13,6 +13,7 @@ from multiprocessing import Value, Lock
 import sys
 import shutil
 import jsonpickle
+import subprocess
 
 # Global variables
 frames_counter_pool = None
@@ -43,8 +44,7 @@ def lookahead_line(fileh):
     fileh.seek(-count, 1)
     return fileh, line
 
-def getVideoMetadata(esp_url, authorization:
-
+def getVideoMetadata(esp_url, authorization):
     #The method rfind() returns the last index where the substring str is found, or -1 if no such index exists, optionally restricting the search to string[beg:end].
     pos2 = esp_url.rfind("/")
     pos1 = esp_url.rfind("/",0,pos2-1)
@@ -470,11 +470,14 @@ def getAuthAccessToken(client_api_key, user_agent, assertion):
 
 def checkFFMPEG():
     #Check for ffmpeg to be in path
-	try:
-		subprocess.call( ['ffmpeg','-version'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-	except FileNotFoundError:
-		return False
-    return True
+    try:
+        subprocess.call( ['ffmpeg','-version'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    except FileNotFoundError as error:
+        a = 1
+        return False
+    else:
+        #In Python, using the else statement, you can instruct a program to execute a certain block of code only in the absence of exceptions.In Python, using the else statement, you can instruct a program to execute a certain block of code only in the absence of exceptions.
+        return True
 
 def saveConfig(args):
     del args.password
@@ -521,14 +524,18 @@ def main(args):
         os.makedirs("./download/stream", exist_ok=True)
         os.makedirs("./download/videos", exist_ok=True)
     else:
-        os.makedirs("./download/stream", exist_ok=False)
-        os.makedirs("./download/videos", exist_ok=False)
+        try:
+            os.makedirs("./download/stream", exist_ok=False)
+            os.makedirs("./download/videos", exist_ok=False)
+        except FileExistsError:
+            print("ERROR: It looks like you have downloaded some video chunks. You need to decide whether to resume the previous download, or to remove the files of the old download in order to start a new one. Exiting")
+            exit()
 
     #*********************************************************#
     # 1. Get clientApiKey
     #*********************************************************#
     print("*"*10+" STEP 1 "+"*"*10)
-    clientApiKey = getClientApiKey()
+    client_api_key = getClientApiKey()
 
     #*********************************************************#
     # 2. Get access_token
@@ -554,14 +561,14 @@ def main(args):
     # 5. Get access_token
     #*********************************************************#
     print("*"*10+" STEP 5 "+"*"*10)
-    access_token, refresh_token, expires_in = getAuthAccessToken(client_api_key, user_agent)
+    access_token, refresh_token, expires_in = getAuthAccessToken(client_api_key, user_agent, assertion)
 
     #*********************************************************#
     # 6. Get metadata and master file
     #*********************************************************#
     print("*"*10+" STEP 6 "+"*"*10)
 
-    metadata = getVideoMetadata(esp_url, access_token, title, contentID)
+    metadata = getVideoMetadata(esp_url, access_token)
     master_url = getMasterFile(esp_url, metadata, access_token)
 
     if verbose:

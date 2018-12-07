@@ -2,9 +2,7 @@
 *.json
 *.ts
 *.mp4
-/temp/*
-/video_dec/*
-/video_enc/*
+/download/*
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
