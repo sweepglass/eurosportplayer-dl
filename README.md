@@ -1,13 +1,13 @@
 # eurosportplayer-dl
 Download videos of games from eurosportplayer.com
 
-## Required Python packages
-A python 3 interpreter is required. Moreover, some Python packages are required too. You can install them using pip:
+## Requirements
+A Python 3 interpreter is required. Moreover, some Python packages are required too. You can install them using pip:
 
 `pip3 install pycrypto jsonpickle`
 
 ## Examples
-`eurosportplayer-dl --url URL -u USERNAME -p PASSWORD`
+`python3 eurosportplayer-dl.py --url URL --user USERNAME --password PASSWORD`
 
 where
 
@@ -17,7 +17,7 @@ where
 
 `PASSWORD` is the password associated with your eurosportplayer.com account
 
-##Optional arguments
+## Optional arguments
 - `--nprocesses NUM`
 
 Use `NUM` parallel processes. Defaults to 1
@@ -28,4 +28,4 @@ Download the resolution `AxB`. Returns an error if a video stream with that reso
 
 - `--load`
 
-Continue the last (interrupted) download.
+Continue the last (interrupted) download, using a session file which is saved everytime you don't use this option. You still need to pass a password, since the password is not stored in the session file.
