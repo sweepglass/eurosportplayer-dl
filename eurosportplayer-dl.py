@@ -14,6 +14,7 @@ import sys
 import shutil
 import jsonpickle
 import subprocess
+import logging
 
 # Global variables
 frames_counter_pool = None
@@ -48,14 +49,11 @@ def getVideoMetadata(esp_url, authorization):
     #The method rfind() returns the last index where the substring str is found, or -1 if no such index exists, optionally restricting the search to string[beg:end].
     pos2 = esp_url.rfind("/")
     pos1 = esp_url.rfind("/",0,pos2-1)
-    #print(pos2)
-    #print(pos1)
     title = esp_url[pos1+1:pos2]
     contentID = esp_url[pos2+1:]
 
-    if debug:
-        print("Title='"+title+"'")
-        print("contentID='"+contentID+"'")
+    logger.debug("Title='"+title+"'")
+    logger.debug("contentID='"+contentID+"'")
 
     headers = {
         'Host':'search-api.svcs.eurosportplayer.com',
@@ -82,17 +80,15 @@ def getVideoMetadata(esp_url, authorization):
     }
 
     data_str = json.dumps(data, separators=(',', ':'))
-    if debug:
-        print("data_str='"+data_str+"'")
+    logger.debug("data_str='"+data_str+"'")
     
     data_enc = urllib.parse.quote_plus(data_str)
-    if debug:
-        print("data_enc='"+data_enc+"'")
+    logger.debug("data_enc='"+data_enc+"'")
 
     r = requests.get(url, headers=headers, params="variables="+data_str)
-    if debug:
-        pretty_print_POST(r.request)
-        print(r.text)
+    pretty_print_POST(r.request)
+    logger.debug(r.text)
+        
     rj = r.json()
 
     with open("./download/metadata.json","w") as fileh:
@@ -107,9 +103,8 @@ def getVideoMetadata(esp_url, authorization):
     episode_name = titles['episodeName']
     title = titles['title']
 
-    if debug:
-        print("eventId='"+eventId+"'")
-        print("mediaId='"+mediaId+"'")
+    logger.debug("eventId='"+eventId+"'")
+    logger.debug("mediaId='"+mediaId+"'")
 
     return {'eventId':eventId, 'mediaId':mediaId, 'episodeName':episode_name, 'title':title}
 
@@ -133,12 +128,11 @@ def getMasterFile(esp_url, metadata, authorization):
 
     r = requests.get(url, headers=headers)
     rj = r.json()
-    #print(rj)
     return rj['stream']['complete']
 
 def decryptStream(ciphertext, key, IV, ofn):
     mode = AES.MODE_CBC
-    print("New AES: key='{}' ({}), mode='{}' ({}), IV='{}' ({})".format(key,type(key),mode,type(mode),IV,type(IV)))
+    logger.debug("New AES: key='{}' ({}), mode='{}' ({}), IV='{}' ({})".format(key,type(key),mode,type(mode),IV,type(IV)))
     decryptor = AES.new(key, mode, IV=IV)
     plain = decryptor.decrypt(ciphertext)
     with open(ofn, 'wb') as fileh:
@@ -158,7 +152,7 @@ def pretty_print_POST(req):
     this function because it is programmed to be pretty
     printed and may differ from the actual request.
     """
-    print('{}\n{}\n{}\n\n{}'.format(
+    logger.debug('{}\n{}\n{}\n\n{}'.format(
         '-----------START-----------',
         req.method + ' ' + req.url,
         '\n'.join('{}: {}'.format(k, v) for k, v in req.headers.items()),
@@ -180,18 +174,17 @@ def getKey(esp_url, key_url, authorization):
     return r.content
 
 def downloadFile(url, fn):
+    logger.debug("Downloading '{}' -> '{}'".format(url, fn))
+        
     r = requests.get(url)
     with open(fn, 'wb') as fd:
         for chunk in r.iter_content(chunk_size=128):
             fd.write(chunk)
 
-
 def downloadFileRaw(url):
-    if verbose:
-        print("requests.get")
+    logger.debug("requests.get")
     r = requests.get(url, stream=True)
-    if verbose:
-        print("r.content")
+    logger.debug("r.content")
     cont = r.content
     return cont
 
@@ -207,41 +200,43 @@ def procPlaylist(esp_url, plfn, base_frame_url, access_token, args, frames_count
     with open(plfn, "r") as plfh:
         for line in plfh:
             if line.find("404 Not Found") != -1:
-                print("ERROR: stream not found!")
+                logger.error("Stream not found!")
                 exit()
 
             # Decryption key found
             if line.startswith("#EXT-X-KEY:"):
+                logging.debug("Decryption key found in stream file")
+                
                 m = re.search('URI=\"(.+?)\"', line)
                 if m:
                     key_url = m.group(1)
-                    #print("key_url: "+key_url)
+                    logging.debug("key_url: "+key_url)
                     if key_url in keys_dict:
                         key = keys_dict[key_url]
                     else:
                         key = getKey(esp_url, key_url, access_token)
                         keys_dict[key_url] = key
-                        #print("key="+str(key))
+                        logging.debug("key="+str(key))
                 else:
-                    print("ERROR: key file not found")
+                    logger.error("Key file not found")
 
                 m = re.search('IV=(.+?)$', line)
                 if m:
                     iv_str = m.group(1).replace("0x","")
-                    #print("iv_str: "+iv_str)
+                    ogging.debug("iv_str: "+iv_str)
                     iv = bytes.fromhex(iv_str)
                 else:
-                    print("ERROR: iv file not found")
+                    logger.error("iv file not found")
 
             # Video frame found
             elif not line.startswith("#"):
                 out_dec = "./download/videos/"+str(framen)+".mp4"
                 if os.path.isfile(out_dec):
                     if args.continuedown:
-                        print("Skipping frame {} (--continue argument passed)".format(framen))
+                        logger.info("Skipping frame {} (--continue argument passed)".format(framen))
                         frames_counter.increment()
                     else:
-                        print("ERROR: frame already present and --continue argument was not passed. This should not happen!")
+                        logger.error("ERROR: frame already present and --continue argument was not passed. This should not happen!")
                         exit()
                 else:
                     #add the frame to the list of frames to download
@@ -270,9 +265,7 @@ def downloadVideoFrame(frame_data):
     out_dec = "./download/videos/"+str(framen)+".mp4"
 
     #print("Downloading frame {}/{} (total downloaded {} - {:.2%})".format(framen, frames_count_pool, frames_counter_n, frames_counter_n/frames_count_pool))
-    fcont=downloadFileRaw(frame_url)
-    if debug:
-        print("Decrypting...")
+    fcont = downloadFileRaw(frame_url)
     decryptStream(fcont, key, iv, out_dec)
 
     counter_n = frames_counter_pool.increment().value()
@@ -290,10 +283,8 @@ def getClientApiKey():
     pos3 = r.text.find("\"",pos2)
     pos4 = r.text.find("\"",pos3+1)
     client_api_key=r.text[pos3+1:pos4]
-    if verbose:
-        print("clientApiKey="+str(clientApiKey))
-        #clientApiKey=4K0redryzbpsShVgneLaVp9AMh0b0sguXS4CtSuG9dC4vSeo9kzyjCW3mV7jfqPd
-        print("\n")
+    logger.debug("clientApiKey={}\n".format(clientApiKey))
+    #clientApiKey=4K0redryzbpsShVgneLaVp9AMh0b0sguXS4CtSuG9dC4vSeo9kzyjCW3mV7jfqPd
     return client_api_key
 
 def getAnonymAccessToken(client_api_key, user_agent):
@@ -394,8 +385,8 @@ def getAuthIdToken(access_token, user_agent, email, password):
         if "errors" in rj:
             err_desc = rj["errors"][0]["description"]
             err_code = rj["errors"][0]["code"]
-            print("AN ERROR OCCURRED")
-            print("Error code: {}\nError description: {}".format(err_code, err_desc))
+            logger.error("AN ERROR OCCURRED")
+            logger.error("Error code: {}\nError description: {}".format(err_code, err_desc))
             exit()
 
         id_token = r.json()['id_token']
@@ -428,9 +419,7 @@ def getAuthAssertion(access_token, user_agent, id_token):
             json.dump(rj, fileh, sort_keys = True, indent = 4, ensure_ascii = False)
 
     assertion = r.json()['assertion']
-    if verbose:
-        print("assertion="+assertion)
-        print("\n")
+    logger.info("assertion={}\n".format(assertion)9
 
     return assertion
 
@@ -460,9 +449,8 @@ def getAuthAccessToken(client_api_key, user_agent, assertion):
     }
 
     r = requests.post(url, headers=headers, data=data)
-    # Debug
-    #prepared = r.request
-    #pretty_print_POST(prepared)
+    # For debug purposes
+    pretty_print_POST(r.request)
 
     rj = r.json()
 
@@ -499,6 +487,24 @@ def concatVideoFrames(file_list, dest_file):
     tocall = ['ffmpeg', '-loglevel','panic','-hide_banner','-f','concat','-safe', '0', '-i', file_list, '-c', 'copy', dest_file]
     subprocess.call(tocall)
 
+def setupLoggers():
+    # create logger
+    logger = logging.getLogger('eurosport-dl')
+    logger.setLevel(logging.DEBUG)
+    # create file handler which logs even debug messages
+    fh = logging.FileHandler('eurosport-dl.log')
+    fh.setLevel(logging.DEBUG)
+    # create console handler with a higher log level
+    ch = logging.StreamHandler()
+    ch.setLevel(logging.ERROR)
+    # create formatter and add it to the handlers
+    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    fh.setFormatter(formatter)
+    ch.setFormatter(formatter)
+    # add the handlers to the logger
+    logger.addHandler(fh)
+    logger.addHandler(ch)
+
 def main(args):
     
     global debug, verbose
@@ -510,18 +516,19 @@ def main(args):
                 break
             elif resp=="N":
                 exit()
-            print("Invalid response")
+            logger.error("Invalid response")
 
     email = args.username
     esp_url = args.esp_url
     nprocesses = args.nprocesses
     debug = args.debug
     verbose = args.verbose
+    logger = logging.getLogger('eurosport-dl')
 
     try:
         password = args.password
     except AttributeError:
-        print("You need to provide a password for the account")
+        logger.error("You need to provide a password for the account")
         exit()
 
     if args.overwrite:
@@ -540,57 +547,52 @@ def main(args):
             os.makedirs("./download/stream", exist_ok=False)
             os.makedirs("./download/videos", exist_ok=False)
         except FileExistsError:
-            print("ERROR: It looks like you have downloaded some video chunks. You need to decide whether to resume the previous download, or to remove the files of the old download in order to start a new one. Exiting")
+            logger.error("It looks like you have downloaded some video chunks. You need to decide whether to resume the previous download, or to remove the files of the old download in order to start a new one. Exiting")
             exit()
 
     #*********************************************************#
     # 1. Get clientApiKey
     #*********************************************************#
-    print("*"*10+" STEP 1 "+"*"*10)
+    logger.info("*"*10+" STEP 1 "+"*"*10)
     client_api_key = getClientApiKey()
 
     #*********************************************************#
     # 2. Get access_token
     #*********************************************************#
-    print("*"*10+" STEP 2 "+"*"*10)
+    logger.info("*"*10+" STEP 2 "+"*"*10)
     access_token, refresh_token, expires_in = getAnonymAccessToken(client_api_key, user_agent)
 
     #*********************************************************#
     # 3. Login (get id_token)
     #*********************************************************#
-    print("*"*10+" STEP 3 "+"*"*10)
+    logger.info("*"*10+" STEP 3 "+"*"*10)
     id_token = getAuthIdToken(access_token, user_agent, email, password)
 
     #*********************************************************#
     # 4. Login (get assertion)
     #*********************************************************#
-    print("*"*10+" STEP 4 "+"*"*10)
+    logger.info("*"*10+" STEP 4 "+"*"*10)
     assertion = getAuthAssertion(access_token, user_agent, id_token)
-    if verbose:
-        print("assertion={}\n".format(assertion))
+    logger.debug("assertion={}\n".format(assertion))
 
     #*********************************************************#
     # 5. Get access_token
     #*********************************************************#
-    print("*"*10+" STEP 5 "+"*"*10)
+    logger.info("*"*10+" STEP 5 "+"*"*10)
     access_token, refresh_token, expires_in = getAuthAccessToken(client_api_key, user_agent, assertion)
 
     #*********************************************************#
     # 6. Get metadata and master file
     #*********************************************************#
-    print("*"*10+" STEP 6 "+"*"*10)
-
+    logger.info("*"*10+" STEP 6 "+"*"*10)
     metadata = getVideoMetadata(esp_url, access_token)
     master_url = getMasterFile(esp_url, metadata, access_token)
-
-    if verbose:
-        print("masterfile_url="+master_url)
+    logger.debug("masterfile_url="+master_url)
 
     #*********************************************************#
-    # 7. Download video frames
+    # 7. Download and process master file
     #*********************************************************#
-
-    print("*"*10+" STEP 7 "+"*"*10)
+    logger.info("*"*10+" STEP 7 "+"*"*10)
 
     # Download master file
     master_local = "./download/stream/master.m3u8"
@@ -608,8 +610,8 @@ def main(args):
 
             resolution = re.search('RESOLUTION=(.*),AVERAGE', line, re.IGNORECASE)
             if(resolution is None):
-                print("ERROR: resolution is none")
-                print(line)
+                logger.error("ERROR: resolution is none")
+                logger.error(line)
                 exit()
             resolution = resolution.group(1)
 
@@ -630,6 +632,10 @@ def main(args):
             local_stream_file = "./download/stream/{}".format(stream_name)
             downloadFile(stream_url_full, local_stream_file)
 
+    #*********************************************************#
+    # 8. Choose a stream
+    #*********************************************************#
+    
     # Choose which stream to use
     playlist_url_rel = None
 
@@ -637,7 +643,7 @@ def main(args):
     if args.resolution=='c':
         stream_map = list()
         for i, (res, url) in enumerate(streams_dict.items()):
-            print(str(i)+". "+ res + " - URL: "+url)
+            logger.info(str(i)+". "+ res + " - URL: "+url)
             stream_map.append(url)
         streamn = input("Choose the stream you want: ")
         streamn = int(streamn)
@@ -648,14 +654,13 @@ def main(args):
         if args.resolution in streams_dict:
             playlist_url_rel = streams_dict[args.resolution]
         else:
-            print("ERROR: The resolution you want is not available")
+            logger.error("The resolution you want is not available")
 
     # Save configuration in file (in order to quickly resume the download later and remember the paramenters, like the URL, in order to resume the download
     saveConfig(args)
 
     # Get stream playlist
-    if debug:
-        print("Remote playlist relative URL: "+playlist_url_rel)
+    logger.debug("Remote playlist relative URL: "+playlist_url_rel)
     playlist_url = master_url.replace("master_desktop_complete-trimmed.m3u8","") + playlist_url_rel
     local_playlist_file = "./download/stream/frames.m3u8"
     if os.path.isfile(local_playlist_file):
@@ -664,8 +669,7 @@ def main(args):
 
     # Base URL of the video fragments files
     frame_baseurl = master_url.replace("master_desktop_complete-trimmed.m3u8","") + playlist_url_rel[:playlist_url_rel.find("/")+1]
-    if debug:
-        print("frame_baseurl="+frame_baseurl)
+    logger.debug("frame_baseurl="+frame_baseurl)
 
     # Create file in which to write fragment list, to be used later by ffmpeg
     frames_counter = Counter()
@@ -687,10 +691,12 @@ def main(args):
 
     concatVideoFrames(list_file, "./download/final.mp4")
 
-    print("Video downloaded")
+    logger.info("Video downloaded")
 
 #MAIN
 if __name__=="__main__":
+    
+    setupLoggers()
 
     parser = argparse.ArgumentParser(description='Download videos from eurosportplayer.com')
     parser.add_argument('--user', '-u', dest='username', help='Username (typically an e-mail address) of the eurosportplayer account')
@@ -714,13 +720,13 @@ if __name__=="__main__":
 
     if (args.load):
         if(args.verbose):
-            print("Reading configuration file")
+            logger.info("Reading configuration file")
         with open("last.json","r") as fileh:
             args2 = jsonpickle.decode(fileh.read())
         args2.continuedown = True
         args2.overwrite = False
         if(args.password is None):
-            print("If you use the --load option, you still need to provide a password for the account using the --password option, since the password is not stored in the configuration file")
+            logger.error("If you use the --load option, you still need to provide a password for the account using the --password option, since the password is not stored in the configuration file")
             exit()
         args2.password = args.password
         main(args2)
