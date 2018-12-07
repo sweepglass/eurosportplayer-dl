@@ -53,7 +53,7 @@ def getVideoMetadata(esp_url, authorization):
     title = esp_url[pos1+1:pos2]
     contentID = esp_url[pos2+1:]
 
-    if verbose:
+    if debug:
         print("Title='"+title+"'")
         print("contentID='"+contentID+"'")
 
@@ -82,10 +82,11 @@ def getVideoMetadata(esp_url, authorization):
     }
 
     data_str = json.dumps(data, separators=(',', ':'))
-    if verbose:
+    if debug:
         print("data_str='"+data_str+"'")
+    
     data_enc = urllib.parse.quote_plus(data_str)
-    if verbose:
+    if debug:
         print("data_enc='"+data_enc+"'")
 
     r = requests.get(url, headers=headers, params="variables="+data_str)
@@ -137,7 +138,7 @@ def getMasterFile(esp_url, metadata, authorization):
 
 def decryptStream(ciphertext, key, IV, ofn):
     mode = AES.MODE_CBC
-    #print("New AES: '{}', '{}', '{}'".format(key,mode,IV))
+    print("New AES: key='{}' ({}), mode='{}' ({}), IV='{}' ({})".format(key,type(key),mode,type(mode),IV,type(IV)))
     decryptor = AES.new(key, mode, IV=IV)
     plain = decryptor.decrypt(ciphertext)
     with open(ofn, 'wb') as fileh:
@@ -389,6 +390,13 @@ def getAuthIdToken(access_token, user_agent, email, password):
         if debug:
             with open("step3.json", "w") as fileh:
                 json.dump(rj, fileh, sort_keys = True, indent = 4, ensure_ascii = False)
+                
+        if "errors" in rj:
+            err_desc = rj["errors"][0]["description"]
+            err_code = rj["errors"][0]["code"]
+            print("AN ERROR OCCURRED")
+            print("Error code: {}\nError description: {}".format(err_code, err_desc))
+            exit()
 
         id_token = r.json()['id_token']
         return id_token
@@ -492,6 +500,8 @@ def concatVideoFrames(file_list, dest_file):
     subprocess.call(tocall)
 
 def main(args):
+    
+    global debug, verbose
 
     if not checkFFMPEG():
         while True:
@@ -505,6 +515,8 @@ def main(args):
     email = args.username
     esp_url = args.esp_url
     nprocesses = args.nprocesses
+    debug = args.debug
+    verbose = args.verbose
 
     try:
         password = args.password
@@ -688,6 +700,7 @@ if __name__=="__main__":
     parser.add_argument('--nprocesses', type=int, help='Number of parallel processes to use', default=1)
 
     parser.add_argument('--verbose', help='Show more messages', action='store_true')
+    parser.add_argument('--debug', help='Show debug messages', action='store_true')
 
     load_group = parser.add_mutually_exclusive_group(required=True)
     load_group.add_argument('--load', action="store_true", help='Load from previous session')
