@@ -23,7 +23,6 @@ keys_dict = dict()
 frames_count = 0
 user_agent = 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/70.0.3538.77 Safari/537.36'
 debug = False
-verbose = False
 
 class Counter(object):
     def __init__(self, initval=0):
@@ -134,7 +133,8 @@ def getMasterFile(esp_url, metadata, authorization):
 def decryptStream(ciphertext, key, IV, ofn):
     logger = logging.getLogger('eurosport-dl')
     mode = AES.MODE_CBC
-    logger.debug("New AES: key='{}' ({}), mode='{}' ({}), IV='{}' ({})".format(key,type(key),mode,type(mode),IV,type(IV)))
+    #logger.debug("ciphertext='{}'".format(ciphertext))
+    logger.debug("AES: key='{}' ({}), mode='{}' ({}), IV='{}' ({})".format(key,type(key),mode,type(mode),IV,type(IV)))
     decryptor = AES.new(key, mode, IV=IV)
     plain = decryptor.decrypt(ciphertext)
     with open(ofn, 'wb') as fileh:
@@ -179,7 +179,8 @@ def getKey(esp_url, key_url, authorization):
 
 def downloadFile(url, fn):
     logger = logging.getLogger('eurosport-dl')
-    logger.debug("Downloading '{}' -> '{}'".format(url, fn))        
+    logger.debug("Downloading '{}' -> '{}'".format(url, fn))
+    
     r = requests.get(url)
     with open(fn, 'wb') as fd:
         for chunk in r.iter_content(chunk_size=128):
@@ -187,16 +188,15 @@ def downloadFile(url, fn):
 
 def downloadFileRaw(url):
     logger = logging.getLogger('eurosport-dl')
-    logger.debug("requests.get")
+    logger.debug("Downloading '{}'".format(url))
     r = requests.get(url, stream=True)
-    logger.debug("r.content")
-    cont = r.content
-    return cont
+    return r.content
 
 
 def procPlaylist(esp_url, plfn, base_frame_url, access_token, args, frames_counter):
     logger = logging.getLogger('eurosport-dl')
-        
+    logger.debug("Processing {}".format(plfn))
+    
     iv = 0
     key = 0
     frames=list()
@@ -211,25 +211,25 @@ def procPlaylist(esp_url, plfn, base_frame_url, access_token, args, frames_count
 
             # Decryption key found
             if line.startswith("#EXT-X-KEY:"):
-                logging.debug("Decryption key found in stream file")
+                logger.debug("Decryption key found in stream file")
                 
                 m = re.search('URI=\"(.+?)\"', line)
                 if m:
                     key_url = m.group(1)
-                    logging.debug("key_url: "+key_url)
+                    logger.debug("key_url: "+key_url)
                     if key_url in keys_dict:
                         key = keys_dict[key_url]
                     else:
                         key = getKey(esp_url, key_url, access_token)
                         keys_dict[key_url] = key
-                        logging.debug("key="+str(key))
+                        logger.debug("key="+str(key))
                 else:
                     logger.error("Key file not found")
 
                 m = re.search('IV=(.+?)$', line)
                 if m:
                     iv_str = m.group(1).replace("0x","")
-                    ogging.debug("iv_str: "+iv_str)
+                    logger.debug("iv_str: "+iv_str)
                     iv = bytes.fromhex(iv_str)
                 else:
                     logger.error("iv file not found")
@@ -246,8 +246,9 @@ def procPlaylist(esp_url, plfn, base_frame_url, access_token, args, frames_count
                         exit()
                 else:
                     #add the frame to the list of frames to download
-                    frame_url = base_frame_url + line
+                    frame_url = base_frame_url + line.strip()
                     frames.append([frame_url, key, iv, framen])
+                    logger.debug("Adding frame '{}'".format(frame_url))
                 framen += 1 #increase frame number in any case, also if we skipped the frame
 
     return frames
@@ -261,6 +262,7 @@ def init_creator_pool(counter, count):
 
 def downloadVideoFrame(frame_data):
     logger = logging.getLogger('eurosport-dl')
+    
     global frames_count_pool
     global frames_counter_pool
 
@@ -271,7 +273,6 @@ def downloadVideoFrame(frame_data):
 
     out_dec = "./download/videos/"+str(framen)+".mp4"
 
-    #print("Downloading frame {}/{} (total downloaded {} - {:.2%})".format(framen, frames_count_pool, frames_counter_n, frames_counter_n/frames_count_pool))
     fcont = downloadFileRaw(frame_url)
     decryptStream(fcont, key, iv, out_dec)
 
@@ -512,7 +513,7 @@ def setupLoggers():
     ch = logging.StreamHandler()
     ch.setLevel(logging.INFO)
     # create formatter and add it to the handlers
-    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    formatter = logging.Formatter('[%(filename)s:%(lineno)s:%(funcName)20s() - %(levelname)s]\n%(message)s')
     fh.setFormatter(formatter)
     formatter = logging.Formatter('%(message)s')
     ch.setFormatter(formatter)
@@ -522,8 +523,8 @@ def setupLoggers():
 
 def main(args):
     
-    global debug, verbose
-
+    logger = logging.getLogger('eurosport-dl')
+    
     if not checkFFMPEG():
         while True:
             resp = input("FFMPEG is not present in path. You would not be allowed to join the downloaded video chunks. Do you wish to continue? (Y/N)")
@@ -536,9 +537,6 @@ def main(args):
     email = args.username
     esp_url = args.esp_url
     nprocesses = args.nprocesses
-    debug = args.debug
-    verbose = args.verbose
-    logger = logging.getLogger('eurosport-dl')
 
     try:
         password = args.password
@@ -638,13 +636,16 @@ def main(args):
                 if next_line[0] != "#":
                     stream_url = next_line.replace("\n","")
             assert(stream_url is not None)
-            streams_dict[resolution] = stream_url
 
             # Download the stream playlist (for debug purposes)
-            stream_url_full = master_url.replace("master_desktop_complete-trimmed.m3u8","") + stream_url
+            stream_url_full = master_url.replace("master_desktop_complete.m3u8","") + stream_url
             stream_name = stream_url[stream_url.find("/")+1:]
             local_stream_file = "./download/stream/{}".format(stream_name)
             downloadFile(stream_url_full, local_stream_file)
+            
+            # Add to stream dictionary
+            streams_dict[resolution] = [stream_url, stream_name]
+            
 
     #*********************************************************#
     # 8. Choose a stream
@@ -656,33 +657,40 @@ def main(args):
     # Ask the user
     if args.resolution=='c':
         stream_map = list()
-        for i, (res, url) in enumerate(streams_dict.items()):
-            logger.info(str(i)+". "+ res + " - URL: "+url)
-            stream_map.append(url)
+        for i, (streams_key, streams_item) in enumerate(streams_dict.items()):
+            logger.info(str(i)+". "+ streams_key + " - URL: "+streams_item[1])
+            stream_map.append(streams_key)
         streamn = input("Choose the stream you want: ")
         streamn = int(streamn)
-        playlist_url_rel = stream_map[streamn]
-
+        key_to_use = stream_map[streamn]
+        args.resolution = streams_key
+        
     # Use the command line argument to choose which stream (resolution) to use
     else:
         if args.resolution in streams_dict:
-            playlist_url_rel = streams_dict[args.resolution]
+            key_to_use = args.resolution
         else:
             logger.error("The resolution you want is not available")
 
     # Save configuration in file (in order to quickly resume the download later and remember the paramenters, like the URL, in order to resume the download
     saveConfig(args)
 
+    #*********************************************************#
+    # 9. Download the chosen stream
+    #*********************************************************#
+    
+    playlist_url_rel = streams_dict[key_to_use][0]
+    playlist_name = streams_dict[key_to_use][1]
+    local_playlist_file = "./download/stream/"+playlist_name
+    if not os.path.isfile(local_playlist_file):
+        logger.error("Playlist file not found: {}".format(local_playlist_file))
+        exit()
+    
     # Get stream playlist
-    logger.debug("Remote playlist relative URL: "+playlist_url_rel)
-    playlist_url = master_url.replace("master_desktop_complete-trimmed.m3u8","") + playlist_url_rel
-    local_playlist_file = "./download/stream/frames.m3u8"
-    if os.path.isfile(local_playlist_file):
-        os.remove(local_playlist_file)
-    downloadFile(playlist_url, local_playlist_file)
+    logger.debug("Playlist name: "+playlist_name)
 
     # Base URL of the video fragments files
-    frame_baseurl = master_url.replace("master_desktop_complete-trimmed.m3u8","") + playlist_url_rel[:playlist_url_rel.find("/")+1]
+    frame_baseurl = master_url.replace("master_desktop_complete.m3u8","") + playlist_url_rel[:playlist_url_rel.find("/")+1]
     logger.debug("frame_baseurl="+frame_baseurl)
 
     # Create file in which to write fragment list, to be used later by ffmpeg
@@ -691,10 +699,18 @@ def main(args):
     frames_to_download = procPlaylist(esp_url, local_playlist_file, frame_baseurl, access_token, args, frames_counter)
     frames_count = len(frames_to_download) + frames_counter.val.value
 
-    pool = mp.Pool(initializer=init_creator_pool, initargs=(frames_counter,frames_count,), processes=nprocesses)
+    # Pool implementation
+    #pool = mp.Pool(initializer=init_creator_pool, initargs=(frames_counter,frames_count,), processes=nprocesses)
+    #i = pool.map(downloadVideoFrame, frames_to_download)
 
-    i = pool.map(downloadVideoFrame, frames_to_download)
-
+    # Normal implementation
+    init_creator_pool(frames_counter,frames_count)
+    for frame in frames_to_download:
+        downloadVideoFrame(frame)
+    
+    
+    
+    
     # Build file list
     list_file = "./download/fragments_list.txt"
     list_fileh = open(list_file, "a")
@@ -711,6 +727,7 @@ def main(args):
 if __name__=="__main__":
     
     setupLoggers()
+    logger = logging.getLogger('eurosport-dl')
 
     parser = argparse.ArgumentParser(description='Download videos from eurosportplayer.com')
     parser.add_argument('--user', '-u', dest='username', help='Username (typically an e-mail address) of the eurosportplayer account')
