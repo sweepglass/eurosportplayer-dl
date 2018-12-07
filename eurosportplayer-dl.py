@@ -22,7 +22,6 @@ frames_count = 0
 user_agent = 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/70.0.3538.77 Safari/537.36'
 debug = False
 verbose = False
-list_fileh = None
 
 class Counter(object):
     def __init__(self, initval=0):
@@ -44,7 +43,20 @@ def lookahead_line(fileh):
     fileh.seek(-count, 1)
     return fileh, line
 
-def getVideoMetadata(esp_url, authorization, title, contentID):
+def getVideoMetadata(esp_url, authorization:
+
+    #The method rfind() returns the last index where the substring str is found, or -1 if no such index exists, optionally restricting the search to string[beg:end].
+    pos2 = esp_url.rfind("/")
+    pos1 = esp_url.rfind("/",0,pos2-1)
+    #print(pos2)
+    #print(pos1)
+    title = esp_url[pos1+1:pos2]
+    contentID = esp_url[pos2+1:]
+
+    if verbose:
+        print("Title='"+title+"'")
+        print("contentID='"+contentID+"'")
+
     headers = {
         'Host':'search-api.svcs.eurosportplayer.com',
         'x-bamsdk-version':'3.3',
@@ -248,7 +260,6 @@ def init_creator_pool(counter, count):
 def downloadVideoFrame(frame_data):
     global frames_count_pool
     global frames_counter_pool
-    global list_fileh
 
     frame_url = frame_data[0]
     key = frame_data[1]
@@ -269,9 +280,6 @@ def downloadVideoFrame(frame_data):
     done = int(50 * perc)
     sys.stdout.write("\r[{}{}] {:.2%} ({}/{})".format('=' * done, ' ' * (50-done), perc, counter_n, frames_count_pool))
     sys.stdout.flush()
-
-    list_fileh.write("file \"./videos/" + str(framen) + ".mp4\"\n")
-    list_fileh.flush()
 
 def getClientApiKey():
     url="https://it.eurosportplayer.com/en/login"
@@ -460,8 +468,36 @@ def getAuthAccessToken(client_api_key, user_agent, assertion):
 
     return access_token, refresh_token, expires_in
 
+def checkFFMPEG():
+    #Check for ffmpeg to be in path
+	try:
+		subprocess.call( ['ffmpeg','-version'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+	except FileNotFoundError:
+		return False
+    return True
+
+def saveConfig(args):
+    del args.password
+    frozen = jsonpickle.encode(args)
+    # Reformat the string with tabs, newlines and sorted keys
+    frozen = json.dumps(json.loads(frozen), indent="\t", sort_keys=True)
+    with open("last.json","w") as fileh:
+        fileh.write(frozen)
+
+def concatVideoFrames(file_list, dest_file):
+    tocall = ['ffmpeg', '-loglevel','panic','-hide_banner','-f','concat','-safe', '0', '-i', file_list, '-c', 'copy', dest_file]
+    subprocess.call(tocall)
 
 def main(args):
+
+    if not checkFFMPEG():
+        while True:
+            resp = input("FFMPEG is not present in path. You would not be allowed to join the downloaded video chunks. Do you wish to continue? (Y/N)")
+            if resp == "Y":
+                break
+            elif resp=="N":
+                exit()
+            print("Invalid response")
 
     email = args.username
     esp_url = args.esp_url
@@ -524,17 +560,6 @@ def main(args):
     # 6. Get metadata and master file
     #*********************************************************#
     print("*"*10+" STEP 6 "+"*"*10)
-
-    pos2 = esp_url.rfind("/")
-    pos1 = esp_url.rfind("/",0,pos2-1)
-    #print(pos2)
-    #print(pos1)
-    title = esp_url[pos1+1:pos2]
-    contentID = esp_url[pos2+1:]
-
-    if verbose:
-        print("Title='"+title+"'")
-        print("contentID='"+contentID+"'")
 
     metadata = getVideoMetadata(esp_url, access_token, title, contentID)
     master_url = getMasterFile(esp_url, metadata, access_token)
@@ -624,9 +649,6 @@ def main(args):
         print("frame_baseurl="+frame_baseurl)
 
     # Create file in which to write fragment list, to be used later by ffmpeg
-    global list_fileh
-    list_fileh = open("./download/fragments_list.txt", "a")
-
     frames_counter = Counter()
     # Process the frames playlist to download single video fragments
     frames_to_download = procPlaylist(esp_url, local_playlist_file, frame_baseurl, access_token, args, frames_counter)
@@ -636,15 +658,17 @@ def main(args):
 
     i = pool.map(downloadVideoFrame, frames_to_download)
 
+    # Build file list
+    list_file = "./download/fragments_list.txt"
+    list_fileh = open(list_file, "a")
+    for root, dir, files in os.walk("./download/videos"):
+        for file in natsort.natsorted(files):
+            list_fileh.write("file \"./videos/" + str(framen) + ".mp4\"\n")
     list_fileh.close()
-    print("Video downloaded")
 
-def saveConfig(args):
-    del args.password
-    frozen = jsonpickle.encode(args)
-    frozen = json.dumps(json.loads(frozen), indent="\t", sort_keys=True)
-    with open("last.json","w") as fileh:
-        fileh.write(frozen)
+    concatVideoFrames(list_file, "./download/final.mp4")
+
+    print("Video downloaded")
 
 #MAIN
 if __name__=="__main__":

@@ -4,7 +4,7 @@ Download videos of games from eurosportplayer.com
 ## Requirements
 A Python 3 interpreter is required. Moreover, some Python packages are required too. You can install them using pip:
 
-`pip3 install pycrypto jsonpickle`
+`pip3 install pycrypto jsonpickle natsort`
 
 ## Examples
 `python3 eurosportplayer-dl.py --url URL --user USERNAME --password PASSWORD`
