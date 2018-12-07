@@ -46,6 +46,7 @@ def lookahead_line(fileh):
     return fileh, line
 
 def getVideoMetadata(esp_url, authorization):
+    logger = logging.getLogger('eurosport-dl')
     #The method rfind() returns the last index where the substring str is found, or -1 if no such index exists, optionally restricting the search to string[beg:end].
     pos2 = esp_url.rfind("/")
     pos1 = esp_url.rfind("/",0,pos2-1)
@@ -109,7 +110,7 @@ def getVideoMetadata(esp_url, authorization):
     return {'eventId':eventId, 'mediaId':mediaId, 'episodeName':episode_name, 'title':title}
 
 def getMasterFile(esp_url, metadata, authorization):
-
+    logger = logging.getLogger('eurosport-dl')
     mediaId = metadata['mediaId']
 
     headers={
@@ -131,6 +132,7 @@ def getMasterFile(esp_url, metadata, authorization):
     return rj['stream']['complete']
 
 def decryptStream(ciphertext, key, IV, ofn):
+    logger = logging.getLogger('eurosport-dl')
     mode = AES.MODE_CBC
     logger.debug("New AES: key='{}' ({}), mode='{}' ({}), IV='{}' ({})".format(key,type(key),mode,type(mode),IV,type(IV)))
     decryptor = AES.new(key, mode, IV=IV)
@@ -144,6 +146,7 @@ def unpadBase64(s):
     return s
 
 def pretty_print_POST(req):
+    logger = logging.getLogger('eurosport-dl')
     """
     At this point it is completely built and ready
     to be fired; it is "prepared".
@@ -161,6 +164,7 @@ def pretty_print_POST(req):
 
 
 def getKey(esp_url, key_url, authorization):
+    logger = logging.getLogger('eurosport-dl')
     headers = {
         'Host':'drm-api.svcs.eurosportplayer.com',
         'authorization':authorization,
@@ -174,14 +178,15 @@ def getKey(esp_url, key_url, authorization):
     return r.content
 
 def downloadFile(url, fn):
-    logger.debug("Downloading '{}' -> '{}'".format(url, fn))
-        
+    logger = logging.getLogger('eurosport-dl')
+    logger.debug("Downloading '{}' -> '{}'".format(url, fn))        
     r = requests.get(url)
     with open(fn, 'wb') as fd:
         for chunk in r.iter_content(chunk_size=128):
             fd.write(chunk)
 
 def downloadFileRaw(url):
+    logger = logging.getLogger('eurosport-dl')
     logger.debug("requests.get")
     r = requests.get(url, stream=True)
     logger.debug("r.content")
@@ -190,7 +195,8 @@ def downloadFileRaw(url):
 
 
 def procPlaylist(esp_url, plfn, base_frame_url, access_token, args, frames_counter):
-
+    logger = logging.getLogger('eurosport-dl')
+        
     iv = 0
     key = 0
     frames=list()
@@ -199,7 +205,7 @@ def procPlaylist(esp_url, plfn, base_frame_url, access_token, args, frames_count
     # Build list of files
     with open(plfn, "r") as plfh:
         for line in plfh:
-            if line.find("404 Not Found") != -1:
+            if (line.find("404 Not Found") != -1) or (line.find("Not Found") != -1):
                 logger.error("Stream not found!")
                 exit()
 
@@ -254,6 +260,7 @@ def init_creator_pool(counter, count):
     frames_count_pool = count
 
 def downloadVideoFrame(frame_data):
+    logger = logging.getLogger('eurosport-dl')
     global frames_count_pool
     global frames_counter_pool
 
@@ -276,6 +283,7 @@ def downloadVideoFrame(frame_data):
     sys.stdout.flush()
 
 def getClientApiKey():
+    logger = logging.getLogger('eurosport-dl')
     url="https://it.eurosportplayer.com/en/login"
     r = requests.get(url)
     pos = r.text.find("clientApiKey")
@@ -283,11 +291,12 @@ def getClientApiKey():
     pos3 = r.text.find("\"",pos2)
     pos4 = r.text.find("\"",pos3+1)
     client_api_key=r.text[pos3+1:pos4]
-    logger.debug("clientApiKey={}\n".format(clientApiKey))
+    logger.debug("client_api_key={}\n".format(client_api_key))
     #clientApiKey=4K0redryzbpsShVgneLaVp9AMh0b0sguXS4CtSuG9dC4vSeo9kzyjCW3mV7jfqPd
     return client_api_key
 
 def getAnonymAccessToken(client_api_key, user_agent):
+    logger = logging.getLogger('eurosport-dl')
     headers={
         'Host':'eu.edge.bamgrid.com',
         'origin':'https://it.eurosportplayer.com',
@@ -358,41 +367,43 @@ def getAnonymAccessToken(client_api_key, user_agent):
     return access_token, refresh_token, expires_in
 
 def getAuthIdToken(access_token, user_agent, email, password):
-        url = "https://eu.edge.bamgrid.com/idp/login"
+    logger = logging.getLogger('eurosport-dl')
+    url = "https://eu.edge.bamgrid.com/idp/login"
 
-        headers={
-            'Host':'eu.edge.bamgrid.com',
-            'origin':'https://it.eurosportplayer.com',
-            'x-bamsdk-version':'3.3',
-            'authorization':'Bearer '+access_token,
-            'content-type':'application/json; charset=UTF-8',
-            'x-bamsdk-platform':'linux',
-            'accept':'application/json; charset=utf-8',
-            'user-agent':user_agent,
-            'referer':'https://it.eurosportplayer.com/en/login',
-            'accept-language':'en-US,en;q=0.9,it-IT;q=0.8,it;q=0.7,de;q=0.6,nl;q=0.5,es;q=0.4,ar;q=0.3,pt;q=0.2,fr;q=0.1,ko;q=0.1,sl;q=0.1,cs;q=0.1,fy;q=0.1,tr;q=0.1'
-        }
+    headers={
+        'Host':'eu.edge.bamgrid.com',
+        'origin':'https://it.eurosportplayer.com',
+        'x-bamsdk-version':'3.3',
+        'authorization':'Bearer '+access_token,
+        'content-type':'application/json; charset=UTF-8',
+        'x-bamsdk-platform':'linux',
+        'accept':'application/json; charset=utf-8',
+        'user-agent':user_agent,
+        'referer':'https://it.eurosportplayer.com/en/login',
+        'accept-language':'en-US,en;q=0.9,it-IT;q=0.8,it;q=0.7,de;q=0.6,nl;q=0.5,es;q=0.4,ar;q=0.3,pt;q=0.2,fr;q=0.1,ko;q=0.1,sl;q=0.1,cs;q=0.1,fy;q=0.1,tr;q=0.1'
+    }
 
-        payload='{"email":"'+email+'","password":"'+password+'"}'
+    payload='{"email":"'+email+'","password":"'+password+'"}'
 
-        r = requests.post(url, headers=headers,data=payload)
-        rj = r.json()
+    r = requests.post(url, headers=headers,data=payload)
+    rj = r.json()
 
-        if debug:
-            with open("step3.json", "w") as fileh:
-                json.dump(rj, fileh, sort_keys = True, indent = 4, ensure_ascii = False)
-                
-        if "errors" in rj:
-            err_desc = rj["errors"][0]["description"]
-            err_code = rj["errors"][0]["code"]
-            logger.error("AN ERROR OCCURRED")
-            logger.error("Error code: {}\nError description: {}".format(err_code, err_desc))
-            exit()
+    if debug:
+        with open("step3.json", "w") as fileh:
+            json.dump(rj, fileh, sort_keys = True, indent = 4, ensure_ascii = False)
+            
+    if "errors" in rj:
+        err_desc = rj["errors"][0]["description"]
+        err_code = rj["errors"][0]["code"]
+        logger.error("AN ERROR OCCURRED")
+        logger.error("Error code: {}\nError description: {}".format(err_code, err_desc))
+        exit()
 
-        id_token = r.json()['id_token']
-        return id_token
+    id_token = r.json()['id_token']
+    return id_token
 
 def getAuthAssertion(access_token, user_agent, id_token):
+    logger = logging.getLogger('eurosport-dl')
     url="https://eu.edge.bamgrid.com/accounts/grant"
 
     headers={
@@ -419,11 +430,12 @@ def getAuthAssertion(access_token, user_agent, id_token):
             json.dump(rj, fileh, sort_keys = True, indent = 4, ensure_ascii = False)
 
     assertion = r.json()['assertion']
-    logger.info("assertion={}\n".format(assertion)9
+    logger.debug("assertion={}\n".format(assertion))
 
     return assertion
 
 def getAuthAccessToken(client_api_key, user_agent, assertion):
+    logger = logging.getLogger('eurosport-dl')
     url='https://eu.edge.bamgrid.com/token'
 
     headers = {
@@ -465,6 +477,7 @@ def getAuthAccessToken(client_api_key, user_agent, assertion):
     return access_token, refresh_token, expires_in
 
 def checkFFMPEG():
+    logger = logging.getLogger('eurosport-dl')
     #Check for ffmpeg to be in path
     try:
         subprocess.call( ['ffmpeg','-version'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
@@ -476,6 +489,7 @@ def checkFFMPEG():
         return True
 
 def saveConfig(args):
+    logger = logging.getLogger('eurosport-dl')
     del args.password
     frozen = jsonpickle.encode(args)
     # Reformat the string with tabs, newlines and sorted keys
@@ -496,10 +510,11 @@ def setupLoggers():
     fh.setLevel(logging.DEBUG)
     # create console handler with a higher log level
     ch = logging.StreamHandler()
-    ch.setLevel(logging.ERROR)
+    ch.setLevel(logging.INFO)
     # create formatter and add it to the handlers
     formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
     fh.setFormatter(formatter)
+    formatter = logging.Formatter('%(message)s')
     ch.setFormatter(formatter)
     # add the handlers to the logger
     logger.addHandler(fh)
@@ -573,7 +588,6 @@ def main(args):
     #*********************************************************#
     logger.info("*"*10+" STEP 4 "+"*"*10)
     assertion = getAuthAssertion(access_token, user_agent, id_token)
-    logger.debug("assertion={}\n".format(assertion))
 
     #*********************************************************#
     # 5. Get access_token
