@@ -1,3 +1,4 @@
+#!/usr/bin/python3
 import requests
 import json
 import base64
@@ -82,14 +83,14 @@ def getVideoMetadata(esp_url, authorization):
 
     data_str = json.dumps(data, separators=(',', ':'))
     logger.debug("data_str='"+data_str+"'")
-    
+
     data_enc = urllib.parse.quote_plus(data_str)
     logger.debug("data_enc='"+data_enc+"'")
 
     r = requests.get(url, headers=headers, params="variables="+data_str)
     pretty_print_POST(r.request)
     logger.debug(r.text)
-        
+
     rj = r.json()
 
     with open("./download/metadata.json","w") as fileh:
@@ -181,7 +182,7 @@ def getKey(esp_url, key_url, authorization):
 def downloadFile(url, fn):
     logger = logging.getLogger('eurosport-dl')
     logger.debug("Downloading '{}' -> '{}'".format(url, fn))
-    
+
     r = requests.get(url)
     with open(fn, 'wb') as fd:
         for chunk in r.iter_content(chunk_size=128):
@@ -197,7 +198,7 @@ def downloadFileRaw(url):
 def procPlaylist(esp_url, plfn, base_frame_url, access_token, args, frames_counter):
     logger = logging.getLogger('eurosport-dl')
     logger.debug("Processing {}".format(plfn))
-    
+
     iv = 0
     key = 0
     frames=list()
@@ -207,13 +208,13 @@ def procPlaylist(esp_url, plfn, base_frame_url, access_token, args, frames_count
     with open(plfn, "r") as plfh:
         for line in plfh:
             if (line.find("404 Not Found") != -1) or (line.find("Not Found") != -1):
-                logger.error("Stream not found!")
+                logger.error("Error 404: This video is not available for download")
                 exit()
 
             # Decryption key found
             if line.startswith("#EXT-X-KEY:"):
                 logger.debug("Decryption key found in stream file")
-                
+
                 m = re.search('URI=\"(.+?)\"', line)
                 if m:
                     key_url = m.group(1)
@@ -263,7 +264,7 @@ def init_creator_pool(counter, count):
 
 def downloadVideoFrame(frame_data):
     logger = logging.getLogger('eurosport-dl')
-    
+
     global frames_count_pool
     global frames_counter_pool
 
@@ -393,7 +394,7 @@ def getAuthIdToken(access_token, user_agent, email, password):
     if debug:
         with open("step3.json", "w") as fileh:
             json.dump(rj, fileh, sort_keys = True, indent = 4, ensure_ascii = False)
-            
+
     if "errors" in rj:
         err_desc = rj["errors"][0]["description"]
         err_code = rj["errors"][0]["code"]
@@ -523,9 +524,9 @@ def setupLoggers():
     logger.addHandler(ch)
 
 def main(args):
-    
+
     logger = logging.getLogger('eurosport-dl')
-    
+
     if not checkFFMPEG():
         while True:
             resp = input("FFMPEG is not present in path. You would not be allowed to join the downloaded video chunks. Do you wish to continue? (Y/N)")
@@ -639,19 +640,21 @@ def main(args):
             assert(stream_url is not None)
 
             # Download the stream playlist (for debug purposes)
-            stream_url_full = master_url.replace("master_desktop_complete.m3u8","") + stream_url
+            master_url = master_url.replace("master_desktop_complete-trimmed.m3u8","")
+            master_url = master_url.replace("master_desktop_complete.m3u8","")
+            stream_url_full = master_url + stream_url
             stream_name = stream_url[stream_url.find("/")+1:]
             local_stream_file = "./download/stream/{}".format(stream_name)
             downloadFile(stream_url_full, local_stream_file)
-            
+
             # Add to stream dictionary
             streams_dict[resolution] = [stream_url, stream_name]
-            
+
 
     #*********************************************************#
     # 8. Choose a stream
     #*********************************************************#
-    
+
     # Choose which stream to use
     playlist_url_rel = None
 
@@ -665,7 +668,7 @@ def main(args):
         streamn = int(streamn)
         key_to_use = stream_map[streamn]
         args.resolution = streams_key
-        
+
     # Use the command line argument to choose which stream (resolution) to use
     else:
         if args.resolution in streams_dict:
@@ -679,14 +682,14 @@ def main(args):
     #*********************************************************#
     # 9. Download the chosen stream
     #*********************************************************#
-    
+
     playlist_url_rel = streams_dict[key_to_use][0]
     playlist_name = streams_dict[key_to_use][1]
     local_playlist_file = "./download/stream/"+playlist_name
     if not os.path.isfile(local_playlist_file):
         logger.error("Playlist file not found: {}".format(local_playlist_file))
         exit()
-    
+
     # Get stream playlist
     logger.debug("Playlist name: "+playlist_name)
 
@@ -708,10 +711,10 @@ def main(args):
     init_creator_pool(frames_counter,frames_count)
     for frame in frames_to_download:
         downloadVideoFrame(frame)
-    
-    
-    
-    
+
+
+
+
     # Build file list
     list_file = "./download/fragments_list.txt"
     list_fileh = open(list_file, "w+")
@@ -726,7 +729,7 @@ def main(args):
 
 #MAIN
 if __name__=="__main__":
-    
+
     setupLoggers()
     logger = logging.getLogger('eurosport-dl')
 
