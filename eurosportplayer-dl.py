@@ -15,6 +15,7 @@ import shutil
 import jsonpickle
 import subprocess
 import logging
+import natsort
 
 # Global variables
 frames_counter_pool = None
@@ -713,10 +714,10 @@ def main(args):
     
     # Build file list
     list_file = "./download/fragments_list.txt"
-    list_fileh = open(list_file, "a")
+    list_fileh = open(list_file, "w+")
     for root, dir, files in os.walk("./download/videos"):
-        for file in natsort.natsorted(files):
-            list_fileh.write("file \"./videos/" + str(framen) + ".mp4\"\n")
+        for fn in natsort.natsorted(files):
+            list_fileh.write("file videos/" + str(fn) + "\n")
     list_fileh.close()
 
     concatVideoFrames(list_file, "./download/final.mp4")
