@@ -41,6 +41,7 @@ frames_count_pool = None
 keys_dict = dict()
 frames_count = 0
 user_agent = 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/70.0.3538.77 Safari/537.36'
+accepted_languages = 'en-US,en;q=0.9,it-IT;q=0.8,it;q=0.7,de;q=0.6,nl;q=0.5,es;q=0.4,ar;q=0.3,pt;q=0.2,fr;q=0.1,ko;q=0.1,sl;q=0.1,cs;q=0.1,fy;q=0.1,tr;q=0.1'
 debug = False
 
 class Counter(object):
@@ -63,13 +64,12 @@ def lookahead_line(fileh):
     fileh.seek(-count, 1)
     return fileh, line
 
-def getVideoMetadata(esp_url, authorization):
+def get_video_metadata(esp_url, authorization):
     logger = logging.getLogger('eurosport-dl')
     #The method rfind() returns the last index where the substring str is found, or -1 if no such index exists, optionally restricting the search to string[beg:end].
-    pos2 = esp_url.rfind("/")
-    pos1 = esp_url.rfind("/",0,pos2-1)
-    title = esp_url[pos1+1:pos2]
-    contentID = esp_url[pos2+1:]
+    res = re.match(".*/(.*)/(.*)", esp_url)
+    title = res.group(1)
+    contentID = res.group(2)
 
     logger.debug("Title='"+title+"'")
     logger.debug("contentID='"+contentID+"'")
@@ -83,7 +83,7 @@ def getVideoMetadata(esp_url, authorization):
         'authorization':'Bearer '+authorization,
         'user-agent':user_agent,
         'referer':esp_url,
-        'accept-language':'en-US,en;q=0.9,it-IT;q=0.8,it;q=0.7,de;q=0.6,nl;q=0.5,es;q=0.4,ar;q=0.3,pt;q=0.2,fr;q=0.1,ko;q=0.1,sl;q=0.1,cs;q=0.1,fy;q=0.1,tr;q=0.1'
+        'accept-language':accepted_languages
     }
 
     url='https://search-api.svcs.eurosportplayer.com/svc/search/v2/graphql/persisted/query/eurosport/Airings'
@@ -127,7 +127,7 @@ def getVideoMetadata(esp_url, authorization):
 
     return {'eventId':eventId, 'mediaId':mediaId, 'episodeName':episode_name, 'title':title}
 
-def getMasterFile(esp_url, metadata, authorization):
+def get_master_file(esp_url, metadata, authorization):
     logger = logging.getLogger('eurosport-dl')
     mediaId = metadata['mediaId']
 
@@ -140,7 +140,7 @@ def getMasterFile(esp_url, metadata, authorization):
         'authorization':authorization,
         'user-agent':user_agent,
         'referer':esp_url,
-        'accept-language':'en-US,en;q=0.9,it-IT;q=0.8,it;q=0.7,de;q=0.6,nl;q=0.5,es;q=0.4,ar;q=0.3,pt;q=0.2,fr;q=0.1,ko;q=0.1,sl;q=0.1,cs;q=0.1,fy;q=0.1,tr;q=0.1'
+        'accept-language':accepted_languages
     }
 
     url='https://global-api.svcs.eurosportplayer.com/media/'+mediaId+'/scenarios/browser'
@@ -149,7 +149,7 @@ def getMasterFile(esp_url, metadata, authorization):
     rj = r.json()
     return rj['stream']['complete']
 
-def decryptStream(ciphertext, key, IV, ofn):
+def decrypt_stream(ciphertext, key, IV, ofn):
     logger = logging.getLogger('eurosport-dl')
     mode = AES.MODE_CBC
     #logger.debug("ciphertext='{}'".format(ciphertext))
@@ -159,7 +159,7 @@ def decryptStream(ciphertext, key, IV, ofn):
     with open(ofn, 'wb') as fileh:
         fileh.write(plain)
 
-def unpadBase64(s):
+def unpad_base64(s):
     while s[-1]=='=':
         s = s[:-1]
     return s
@@ -182,7 +182,7 @@ def pretty_print_POST(req):
     ))
 
 
-def getKey(esp_url, key_url, authorization):
+def get_key(esp_url, key_url, authorization):
     logger = logging.getLogger('eurosport-dl')
     headers = {
         'Host':'drm-api.svcs.eurosportplayer.com',
@@ -191,12 +191,12 @@ def getKey(esp_url, key_url, authorization):
         'user-agent':user_agent,
         'accept':'*/*',
         'referer':esp_url,
-        'accept-language':'en-US,en;q=0.9,it-IT;q=0.8,it;q=0.7,de;q=0.6,nl;q=0.5,es;q=0.4,ar;q=0.3,pt;q=0.2,fr;q=0.1,ko;q=0.1,sl;q=0.1,cs;q=0.1,fy;q=0.1,tr;q=0.1'
+        'accept-language':accepted_languages
     }
     r = requests.get(key_url, headers=headers, stream=True)
     return r.content
 
-def downloadFile(url, fn):
+def download_file(url, fn):
     logger = logging.getLogger('eurosport-dl')
     logger.debug("Downloading '{}' -> '{}'".format(url, fn))
 
@@ -205,14 +205,14 @@ def downloadFile(url, fn):
         for chunk in r.iter_content(chunk_size=128):
             fd.write(chunk)
 
-def downloadFileRaw(url):
+def download_file_raw(url):
     logger = logging.getLogger('eurosport-dl')
     logger.debug("Downloading '{}'".format(url))
     r = requests.get(url, stream=True)
     return r.content
 
 
-def procPlaylist(esp_url, plfn, base_frame_url, access_token, args, frames_counter):
+def proc_playlist(esp_url, plfn, base_frame_url, access_token, args, frames_counter):
     logger = logging.getLogger('eurosport-dl')
     logger.debug("Processing {}".format(plfn))
 
@@ -239,7 +239,7 @@ def procPlaylist(esp_url, plfn, base_frame_url, access_token, args, frames_count
                     if key_url in keys_dict:
                         key = keys_dict[key_url]
                     else:
-                        key = getKey(esp_url, key_url, access_token)
+                        key = get_key(esp_url, key_url, access_token)
                         keys_dict[key_url] = key
                         logger.debug("key="+str(key))
                 else:
@@ -279,7 +279,7 @@ def init_creator_pool(counter, count):
     global frames_count_pool
     frames_count_pool = count
 
-def downloadVideoFrame(frame_data):
+def download_video_frame(frame_data):
     logger = logging.getLogger('eurosport-dl')
 
     global frames_count_pool
@@ -292,8 +292,8 @@ def downloadVideoFrame(frame_data):
 
     out_dec = "./download/videos/"+str(framen)+".mp4"
 
-    fcont = downloadFileRaw(frame_url)
-    decryptStream(fcont, key, iv, out_dec)
+    fcont = download_file_raw(frame_url)
+    decrypt_stream(fcont, key, iv, out_dec)
 
     counter_n = frames_counter_pool.increment().value()
 
@@ -302,20 +302,16 @@ def downloadVideoFrame(frame_data):
     sys.stdout.write("\r[{}{}] {:.2%} ({}/{})".format('=' * done, ' ' * (50-done), perc, counter_n, frames_count_pool))
     sys.stdout.flush()
 
-def getClientApiKey():
+def get_client_api_key():
     logger = logging.getLogger('eurosport-dl')
     url="https://it.eurosportplayer.com/en/login"
     r = requests.get(url)
-    pos = r.text.find("clientApiKey")
-    pos2 = r.text.find(":",pos)
-    pos3 = r.text.find("\"",pos2)
-    pos4 = r.text.find("\"",pos3+1)
-    client_api_key=r.text[pos3+1:pos4]
+    client_api_key = re.match("clientApiKey:\"(.*)\"", r.text).group(1)
     logger.debug("client_api_key={}\n".format(client_api_key))
     #clientApiKey=4K0redryzbpsShVgneLaVp9AMh0b0sguXS4CtSuG9dC4vSeo9kzyjCW3mV7jfqPd
     return client_api_key
 
-def getAnonymAccessToken(client_api_key, user_agent):
+def get_anonym_access_token(client_api_key, user_agent):
     logger = logging.getLogger('eurosport-dl')
     headers={
         'Host':'eu.edge.bamgrid.com',
@@ -327,7 +323,7 @@ def getAnonymAccessToken(client_api_key, user_agent):
         'accept':'application/json',
         'user-agent':user_agent,
         'referer':'https://it.eurosportplayer.com/en/login',
-        'accept-language':'en-US,en;q=0.9,it-IT;q=0.8,it;q=0.7,de;q=0.6,nl;q=0.5,es;q=0.4,ar;q=0.3,pt;q=0.2,fr;q=0.1,ko;q=0.1,sl;q=0.1,cs;q=0.1,fy;q=0.1,tr;q=0.1'
+        'accept-language':accepted_languages
     }
 
     #Build JWT called "subject_token"
@@ -340,7 +336,7 @@ def getAnonymAccessToken(client_api_key, user_agent):
     st1_str = json.dumps(st1, separators=(',', ':'))
     st1_b64 = base64.b64encode(st1_str.encode("utf8")).decode("ascii")
     #remove "==" at the end, which is used to pad a base64 into 64bit. Leaving == at the end would make the server reject the request
-    st1_b64 = unpadBase64(st1_b64)
+    st1_b64 = unpad_base64(st1_b64)
 
     st2 = OrderedDict([
         ("sub", "be517068-f328-4920-aca3-8524c4e3762f"),
@@ -354,11 +350,11 @@ def getAnonymAccessToken(client_api_key, user_agent):
 
     st2_str = json.dumps(st2, separators=(',', ':'))
     st2_b64 = base64.b64encode(st2_str.encode("ascii")).decode("ascii")
-    st2_b64 = unpadBase64(st2_b64)
+    st2_b64 = unpad_base64(st2_b64)
 
     subject_token = st1_b64+"."+st2_b64+"."+"nPmRhQH9RzNF7FQ5QwHGzw-ngEFSIDe75OPXp4eaBiqStsVmJ5WiVGJnTQafEBW1zM1IpOeUvq7YyWpOOzI_fw"
 
-    data={
+    data = {
         "grant_type":"urn:ietf:params:oauth:grant-type:token-exchange",
         "latitude":0,
         "longitude":0,
@@ -367,7 +363,7 @@ def getAnonymAccessToken(client_api_key, user_agent):
         "subject_token_type":"urn:bamtech:params:oauth:token-type:device"
     }
 
-    url='https://eu.edge.bamgrid.com/token'
+    url = 'https://eu.edge.bamgrid.com/token'
 
     r = requests.post(url, headers=headers, data=data)
     # Debug
@@ -386,7 +382,7 @@ def getAnonymAccessToken(client_api_key, user_agent):
 
     return access_token, refresh_token, expires_in
 
-def getAuthIdToken(access_token, user_agent, email, password):
+def get_auth_id_token(access_token, user_agent, email, password):
     logger = logging.getLogger('eurosport-dl')
     url = "https://eu.edge.bamgrid.com/idp/login"
 
@@ -400,7 +396,7 @@ def getAuthIdToken(access_token, user_agent, email, password):
         'accept':'application/json; charset=utf-8',
         'user-agent':user_agent,
         'referer':'https://it.eurosportplayer.com/en/login',
-        'accept-language':'en-US,en;q=0.9,it-IT;q=0.8,it;q=0.7,de;q=0.6,nl;q=0.5,es;q=0.4,ar;q=0.3,pt;q=0.2,fr;q=0.1,ko;q=0.1,sl;q=0.1,cs;q=0.1,fy;q=0.1,tr;q=0.1'
+        'accept-language':accepted_languages
     }
 
     payload='{"email":"'+email+'","password":"'+password+'"}'
@@ -422,7 +418,7 @@ def getAuthIdToken(access_token, user_agent, email, password):
     id_token = r.json()['id_token']
     return id_token
 
-def getAuthAssertion(access_token, user_agent, id_token):
+def get_auth_assertion(access_token, user_agent, id_token):
     logger = logging.getLogger('eurosport-dl')
     url="https://eu.edge.bamgrid.com/accounts/grant"
 
@@ -436,7 +432,7 @@ def getAuthAssertion(access_token, user_agent, id_token):
         'accept':'application/json; charset=utf-8',
         'user-agent':user_agent,
         'referer':'https://it.eurosportplayer.com/en/login',
-        'accept-language':'en-US,en;q=0.9,it-IT;q=0.8,it;q=0.7,de;q=0.6,nl;q=0.5,es;q=0.4,ar;q=0.3,pt;q=0.2,fr;q=0.1,ko;q=0.1,sl;q=0.1,cs;q=0.1,fy;q=0.1,tr;q=0.1'
+        'accept-language':accepted_languages
     }
 
     #uses the id_token (obtained by logging in)
@@ -454,7 +450,7 @@ def getAuthAssertion(access_token, user_agent, id_token):
 
     return assertion
 
-def getAuthAccessToken(client_api_key, user_agent, assertion):
+def get_auth_acess_token(client_api_key, user_agent, assertion):
     logger = logging.getLogger('eurosport-dl')
     url='https://eu.edge.bamgrid.com/token'
 
@@ -468,7 +464,7 @@ def getAuthAccessToken(client_api_key, user_agent, assertion):
         'accept':'application/json',
         'user-agent':user_agent,
         'referer':'https://it.eurosportplayer.com/en/login',
-        'accept-language':'en-US,en;q=0.9,it-IT;q=0.8,it;q=0.7,de;q=0.6,nl;q=0.5,es;q=0.4,ar;q=0.3,pt;q=0.2,fr;q=0.1,ko;q=0.1,sl;q=0.1,cs;q=0.1,fy;q=0.1,tr;q=0.1'
+        'accept-language':accepted_languages
     }
 
     data = {
@@ -496,7 +492,7 @@ def getAuthAccessToken(client_api_key, user_agent, assertion):
 
     return access_token, refresh_token, expires_in
 
-def checkFFMPEG():
+def check_ffmpeg():
     logger = logging.getLogger('eurosport-dl')
     #Check for ffmpeg to be in path
     try:
@@ -508,7 +504,7 @@ def checkFFMPEG():
         #In Python, using the else statement, you can instruct a program to execute a certain block of code only in the absence of exceptions.In Python, using the else statement, you can instruct a program to execute a certain block of code only in the absence of exceptions.
         return True
 
-def saveConfig(args):
+def save_config(args):
     logger = logging.getLogger('eurosport-dl')
     del args.password
     frozen = jsonpickle.encode(args)
@@ -517,11 +513,11 @@ def saveConfig(args):
     with open("last.json","w") as fileh:
         fileh.write(frozen)
 
-def concatVideoFrames(file_list, dest_file):
+def concat_video_frames(file_list, dest_file):
     tocall = ['ffmpeg', '-loglevel','panic','-hide_banner','-f','concat','-safe', '0', '-i', file_list, '-c', 'copy', dest_file]
     subprocess.call(tocall)
 
-def setupLoggers():
+def setup_loggers():
     # create logger
     logger = logging.getLogger('eurosport-dl')
     logger.setLevel(logging.DEBUG)
@@ -544,7 +540,7 @@ def main(args):
 
     logger = logging.getLogger('eurosport-dl')
 
-    if not checkFFMPEG():
+    if not check_ffmpeg():
         while True:
             resp = input("FFMPEG is not present in path. You would not be allowed to join the downloaded video chunks. Do you wish to continue? (Y/N)")
             if resp == "Y":
@@ -586,38 +582,38 @@ def main(args):
     # 1. Get clientApiKey
     #*********************************************************#
     logger.info("*"*10+" STEP 1 "+"*"*10)
-    client_api_key = getClientApiKey()
+    client_api_key = get_client_api_key()
 
     #*********************************************************#
     # 2. Get access_token
     #*********************************************************#
     logger.info("*"*10+" STEP 2 "+"*"*10)
-    access_token, refresh_token, expires_in = getAnonymAccessToken(client_api_key, user_agent)
+    access_token, refresh_token, expires_in = get_anonym_access_token(client_api_key, user_agent)
 
     #*********************************************************#
     # 3. Login (get id_token)
     #*********************************************************#
     logger.info("*"*10+" STEP 3 "+"*"*10)
-    id_token = getAuthIdToken(access_token, user_agent, email, password)
+    id_token = get_auth_id_token(access_token, user_agent, email, password)
 
     #*********************************************************#
     # 4. Login (get assertion)
     #*********************************************************#
     logger.info("*"*10+" STEP 4 "+"*"*10)
-    assertion = getAuthAssertion(access_token, user_agent, id_token)
+    assertion = get_auth_assertion(access_token, user_agent, id_token)
 
     #*********************************************************#
     # 5. Get access_token
     #*********************************************************#
     logger.info("*"*10+" STEP 5 "+"*"*10)
-    access_token, refresh_token, expires_in = getAuthAccessToken(client_api_key, user_agent, assertion)
+    access_token, refresh_token, expires_in = get_auth_acess_token(client_api_key, user_agent, assertion)
 
     #*********************************************************#
     # 6. Get metadata and master file
     #*********************************************************#
     logger.info("*"*10+" STEP 6 "+"*"*10)
-    metadata = getVideoMetadata(esp_url, access_token)
-    master_url = getMasterFile(esp_url, metadata, access_token)
+    metadata = get_video_metadata(esp_url, access_token)
+    master_url = get_master_file(esp_url, metadata, access_token)
     logger.debug("masterfile_url="+master_url)
 
     #*********************************************************#
@@ -627,7 +623,7 @@ def main(args):
 
     # Download master file
     master_local = "./download/stream/master.m3u8"
-    downloadFile(master_url, master_local)
+    download_file(master_url, master_local)
 
     streams_dict = dict()
     master_file = None
@@ -662,7 +658,7 @@ def main(args):
             stream_url_full = master_url + stream_url
             stream_name = stream_url[stream_url.find("/")+1:]
             local_stream_file = "./download/stream/{}".format(stream_name)
-            downloadFile(stream_url_full, local_stream_file)
+            download_file(stream_url_full, local_stream_file)
 
             # Add to stream dictionary
             streams_dict[resolution] = [stream_url, stream_name]
@@ -694,7 +690,7 @@ def main(args):
             logger.error("The resolution you want is not available")
 
     # Save configuration in file (in order to quickly resume the download later and remember the paramenters, like the URL, in order to resume the download
-    saveConfig(args)
+    save_config(args)
 
     #*********************************************************#
     # 9. Download the chosen stream
@@ -717,17 +713,17 @@ def main(args):
     # Create file in which to write fragment list, to be used later by ffmpeg
     frames_counter = Counter()
     # Process the frames playlist to download single video fragments
-    frames_to_download = procPlaylist(esp_url, local_playlist_file, frame_baseurl, access_token, args, frames_counter)
+    frames_to_download = proc_playlist(esp_url, local_playlist_file, frame_baseurl, access_token, args, frames_counter)
     frames_count = len(frames_to_download) + frames_counter.val.value
 
     # Pool implementation
     #pool = mp.Pool(initializer=init_creator_pool, initargs=(frames_counter,frames_count,), processes=nprocesses)
-    #i = pool.map(downloadVideoFrame, frames_to_download)
+    #i = pool.map(download_video_frame, frames_to_download)
 
     # Normal implementation
     init_creator_pool(frames_counter,frames_count)
     for frame in frames_to_download:
-        downloadVideoFrame(frame)
+        download_video_frame(frame)
 
 
 
@@ -740,14 +736,14 @@ def main(args):
             list_fileh.write("file videos/" + str(fn) + "\n")
     list_fileh.close()
 
-    concatVideoFrames(list_file, "./download/final.mp4")
+    concat_video_frames(list_file, "./download/final.mp4")
 
     logger.info("Video downloaded")
 
 #MAIN
 if __name__=="__main__":
 
-    setupLoggers()
+    setup_loggers()
     logger = logging.getLogger('eurosport-dl')
 
     parser = argparse.ArgumentParser(description='Download videos from eurosportplayer.com')
@@ -772,13 +768,13 @@ if __name__=="__main__":
 
     if (args.load):
         if(args.verbose):
-            logger.info("Reading configuration file")
+            logger.info("Reading session file")
         with open("last.json","r") as fileh:
             args2 = jsonpickle.decode(fileh.read())
         args2.continuedown = True
         args2.overwrite = False
         if(args.password is None):
-            logger.error("If you use the --load option, you still need to provide a password for the account using the --password option, since the password is not stored in the configuration file")
+            logger.error("If you use the --load option, you still need to provide a password for the account using the --password option, since the password is not stored in the session file")
             exit()
         args2.password = args.password
         main(args2)
