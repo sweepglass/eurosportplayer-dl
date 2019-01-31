@@ -5,7 +5,7 @@ build/
 *.json
 *.ts
 *.mp4
-/download/*
+download/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

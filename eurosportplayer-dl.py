@@ -306,7 +306,10 @@ def get_client_api_key():
     logger = logging.getLogger('eurosport-dl')
     url="https://it.eurosportplayer.com/en/login"
     r = requests.get(url)
-    client_api_key = re.match("clientApiKey:\"(.*)\"", r.text).group(1)
+    #with open("clientApiKey.txt", "w") as fileh:
+    #    fileh.write(r.text)
+    client_api_key = re.search("\"clientApiKey\"(?:\s*):(?:\s*)\"(.*?)\"", r.text).group(1)
+    logger.debug("non matching group")
     logger.debug("client_api_key={}\n".format(client_api_key))
     #clientApiKey=4K0redryzbpsShVgneLaVp9AMh0b0sguXS4CtSuG9dC4vSeo9kzyjCW3mV7jfqPd
     return client_api_key
@@ -366,9 +369,9 @@ def get_anonym_access_token(client_api_key, user_agent):
     url = 'https://eu.edge.bamgrid.com/token'
 
     r = requests.post(url, headers=headers, data=data)
+
     # Debug
-    #prepared = r.request
-    #pretty_print_POST(prepared)
+    pretty_print_POST(r.request)
 
     rj = r.json()
 
@@ -522,7 +525,7 @@ def setup_loggers():
     logger = logging.getLogger('eurosport-dl')
     logger.setLevel(logging.DEBUG)
     # create file handler which logs even debug messages
-    fh = logging.FileHandler('eurosport-dl.log')
+    fh = logging.FileHandler('eurosport-dl.log', mode='w')
     fh.setLevel(logging.DEBUG)
     # create console handler with a higher log level
     ch = logging.StreamHandler()
@@ -725,9 +728,6 @@ def main(args):
     for frame in frames_to_download:
         download_video_frame(frame)
 
-
-
-
     # Build file list
     list_file = "./download/fragments_list.txt"
     list_fileh = open(list_file, "w+")
@@ -747,7 +747,7 @@ if __name__=="__main__":
     logger = logging.getLogger('eurosport-dl')
 
     parser = argparse.ArgumentParser(description='Download videos from eurosportplayer.com')
-    parser.add_argument('--user', '-u', dest='username', help='Username (typically an e-mail address) of the eurosportplayer account')
+    parser.add_argument('--user', '-u', '--username', dest='username', help='Username (typically an e-mail address) of the eurosportplayer account')
     parser.add_argument('--password', '-p', dest='password', help='Password of the eurosportplayer account')
     parser.add_argument('--resolution', '-r', default='c', help='Resolution of the video to download')
 
@@ -765,6 +765,8 @@ if __name__=="__main__":
     continue_group.add_argument('--overwrite', action='store_true', help='Delete the previous download')
 
     args = parser.parse_args()
+
+    debug = args.debug
 
     if (args.load):
         if(args.verbose):
