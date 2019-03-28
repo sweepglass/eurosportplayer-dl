@@ -199,7 +199,6 @@ def get_video_metadata(esp_url, authorization):
     episode_name = titles['episodeName']
     title = titles['title']
 
-    logger.debug("eventId='"+eventId+"'")
     logger.debug("mediaId='"+mediaId+"'")
 
     return {'mediaId':mediaId, 'episodeName':episode_name, 'title':title}
