@@ -16,6 +16,7 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
     
+import ctypes
 import requests
 import json
 import base64
@@ -63,10 +64,78 @@ def lookahead_line(fileh):
     count = len(line) + 1
     fileh.seek(-count, 1)
     return fileh, line
+    
+def get_video_metadata_partner(esp_url, authorization):
+    logger = logging.getLogger('eurosport-dl')
+    
+    # Extract title and contentID from URL
+    # e.g. https://it.eurosportplayer.com/video/eurocup-ratiopharm-ulm-v-galatasaray-istanbul/68881112
+    # title = 
+    # contentID = 68881112
+    res = re.match(".*/(.*)/(.*)", esp_url)
+    title = res.group(1)
+    contentID = res.group(2)
+
+    logger.debug("Title='"+title+"'")
+    logger.debug("contentID='"+contentID+"'")
+
+    headers = {
+        'Host':'search-api.svcs.eurosportplayer.com',
+        'x-bamsdk-version':'3.3',
+        'accept':'application/json',
+        'x-bamsdk-platform':'linux',
+        'origin':'https://it.eurosportplayer.com',
+        'authorization':'Bearer '+authorization,
+        'user-agent':user_agent,
+        'referer':esp_url,
+        'accept-language':accepted_languages,
+        'if-none-match':'W/"ee36265c0bb40e60db045a8926e1764d7012f338"'
+    }
+
+    url='https://search-api.svcs.eurosportplayer.com/svc/search/v2/graphql/persisted/query/core/VideoByContentId'
+
+    data = {
+        "preferredLanguages":["en","it"],
+        "mediaRights":["GeoMediaRight"],
+        "uiLang":"en",
+        "include_images":1,
+        "pageType":"video",
+        "title":title,
+        "contentId":contentID
+    }
+
+    # Convert data to JSON
+    data_str = json.dumps(data, separators=(',', ':'))
+    logger.debug("data_str='"+data_str+"'")
+
+    # URL encoding
+    data_enc = urllib.parse.quote_plus(data_str)
+    logger.debug("data_enc='"+data_enc+"'")
+
+    r = requests.get(url, headers=headers, params="variables="+data_str)
+    #pretty_print_POST(r.request)
+    logger.debug("Response received for metadata request: " + r.text)
+
+    rj = r.json()
+
+    with open("./download/metadata.json","w") as fileh:
+        fileh.write(json.dumps(rj, sort_keys=True, indent="\t"))
+        
+    # From the response, we extract: mediaId and title
+    mediaId = rj['data']['VideoByContentId']['media'][0]['mediaId']
+    title = rj['data']['VideoByContentId']['assetName']
+
+    logger.debug("mediaId='"+mediaId+"'")
+
+    return {'mediaId':mediaId, 'title':title}
 
 def get_video_metadata(esp_url, authorization):
     logger = logging.getLogger('eurosport-dl')
-    #The method rfind() returns the last index where the substring str is found, or -1 if no such index exists, optionally restricting the search to string[beg:end].
+    
+    # Extract title and contentID from URL
+    # e.g. https://it.eurosportplayer.com/video/eurocup-ratiopharm-ulm-v-galatasaray-istanbul/68881112
+    # title = 
+    # contentID = 68881112
     res = re.match(".*/(.*)/(.*)", esp_url)
     title = res.group(1)
     contentID = res.group(2)
@@ -86,7 +155,8 @@ def get_video_metadata(esp_url, authorization):
         'accept-language':accepted_languages
     }
 
-    url='https://search-api.svcs.eurosportplayer.com/svc/search/v2/graphql/persisted/query/eurosport/Airings'
+    #url='https://search-api.svcs.eurosportplayer.com/svc/search/v2/graphql/persisted/query/eurosport/Airings'
+    url='https://search-api.svcs.eurosportplayer.com/svc/search/v2/graphql/persisted/query/eurosport/web/Airings/onAir'
 
     data = {
         "preferredLanguages":["en","it"],
@@ -106,17 +176,24 @@ def get_video_metadata(esp_url, authorization):
 
     r = requests.get(url, headers=headers, params="variables="+data_str)
     pretty_print_POST(r.request)
-    logger.debug(r.text)
+    logger.debug("Response received for metadata request: " + r.text)
 
     rj = r.json()
 
     with open("./download/metadata.json","w") as fileh:
         fileh.write(json.dumps(rj, sort_keys=True, indent="\t"))
+        
+    if 'data' not in rj:
+        raise Exception("The element 'data' is not present in metadata. Please report this")
+   
+    if 'Airings' not in rj['data']:
+        raise Exception("The element 'Airings' is not present in rj[data]. Please report this")
 
-    eventId = rj['data']['Airings'][0]['eventId']
-
+    if len(rj['data']['Airings']) == 0:
+        raise Exception("The element rj['data']['Airings'] is empty. Please report this as a bug")
+        
+    # From the response, we extract: mediaId and title
     mediaId = rj['data']['Airings'][0]['mediaId']
-
     titles = rj['data']['Airings'][0]['titles'][0]
 
     episode_name = titles['episodeName']
@@ -125,7 +202,7 @@ def get_video_metadata(esp_url, authorization):
     logger.debug("eventId='"+eventId+"'")
     logger.debug("mediaId='"+mediaId+"'")
 
-    return {'eventId':eventId, 'mediaId':mediaId, 'episodeName':episode_name, 'title':title}
+    return {'mediaId':mediaId, 'episodeName':episode_name, 'title':title}
 
 def get_master_file(esp_url, metadata, authorization):
     logger = logging.getLogger('eurosport-dl')
@@ -306,10 +383,7 @@ def get_client_api_key():
     logger = logging.getLogger('eurosport-dl')
     url="https://it.eurosportplayer.com/en/login"
     r = requests.get(url)
-    #with open("clientApiKey.txt", "w") as fileh:
-    #    fileh.write(r.text)
     client_api_key = re.search("\"clientApiKey\"(?:\s*):(?:\s*)\"(.*?)\"", r.text).group(1)
-    logger.debug("non matching group")
     logger.debug("client_api_key={}\n".format(client_api_key))
     #clientApiKey=4K0redryzbpsShVgneLaVp9AMh0b0sguXS4CtSuG9dC4vSeo9kzyjCW3mV7jfqPd
     return client_api_key
@@ -555,6 +629,10 @@ def main(args):
     email = args.username
     esp_url = args.esp_url
     nprocesses = args.nprocesses
+    
+    partner = args.partner
+    if partner:
+        logger.warning("Usage of experimental partner parameter")
 
     try:
         password = args.password
@@ -615,7 +693,12 @@ def main(args):
     # 6. Get metadata and master file
     #*********************************************************#
     logger.info("*"*10+" STEP 6 "+"*"*10)
-    metadata = get_video_metadata(esp_url, access_token)
+    
+    if not partner:
+        metadata = get_video_metadata(esp_url, access_token)
+    else:
+        metadata = get_video_metadata_partner(esp_url, access_token)
+        
     master_url = get_master_file(esp_url, metadata, access_token)
     logger.debug("masterfile_url="+master_url)
 
@@ -636,14 +719,17 @@ def main(args):
         master_file = fileh.readlines()
 
     for linen, line in enumerate(master_file):
-        if line.startswith("#EXT-X-STREAM-INF:RESOLUTION="):
+    
+        # video stream
+        if line.startswith("#EXT-X-STREAM-INF:RESOLUTION=") or line.startswith("#EXT-X-STREAM-INF:BANDWIDTH="):
 
-            resolution = re.search('RESOLUTION=(.*),AVERAGE', line, re.IGNORECASE)
+            resolution = re.search('RESOLUTION=(.*?),', line, re.IGNORECASE)
             if(resolution is None):
                 logger.error("ERROR: resolution is none")
                 logger.error(line)
                 exit()
             resolution = resolution.group(1)
+            logger.error("Found resolution: "+str(resolution))
 
             stream_url = None
             url_search = re.search('URI="(.*)"', line, re.IGNORECASE)
@@ -658,6 +744,7 @@ def main(args):
             # Download the stream playlist (for debug purposes)
             master_url = master_url.replace("master_desktop_complete-trimmed.m3u8","")
             master_url = master_url.replace("master_desktop_complete.m3u8","")
+            master_url = master_url.replace("master_wired_web_s2.m3u8","")
             stream_url_full = master_url + stream_url
             stream_name = stream_url[stream_url.find("/")+1:]
             local_stream_file = "./download/stream/{}".format(stream_name)
@@ -754,6 +841,7 @@ if __name__=="__main__":
     parser.add_argument('--nprocesses', type=int, help='Number of parallel processes to use', default=1)
 
     parser.add_argument('--verbose', help='Show more messages', action='store_true')
+    parser.add_argument('--partner', help='EXPERIMENTAL', action='store_true')
     parser.add_argument('--debug', help='Show debug messages', action='store_true')
 
     load_group = parser.add_mutually_exclusive_group(required=True)
