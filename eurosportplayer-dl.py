@@ -129,7 +129,7 @@ def get_video_metadata_partner(esp_url, authorization):
 
     return {'mediaId':mediaId, 'title':title}
 
-def get_video_metadata(esp_url, authorization):
+def get_video_metadata(esp_url, authorization, on_air=False):
     logger = logging.getLogger('eurosport-dl')
     
     # Extract title and contentID from URL
@@ -155,9 +155,11 @@ def get_video_metadata(esp_url, authorization):
         'accept-language':accepted_languages
     }
 
-    #url='https://search-api.svcs.eurosportplayer.com/svc/search/v2/graphql/persisted/query/eurosport/Airings'
-    url='https://search-api.svcs.eurosportplayer.com/svc/search/v2/graphql/persisted/query/eurosport/web/Airings/onAir'
-
+    if on_air:
+        url='https://search-api.svcs.eurosportplayer.com/svc/search/v2/graphql/persisted/query/eurosport/web/Airings/onAir'
+    else:
+        url='https://search-api.svcs.eurosportplayer.com/svc/search/v2/graphql/persisted/query/eurosport/Airings'
+        
     data = {
         "preferredLanguages":["en","it"],
         "mediaRights":["GeoMediaRight"],
@@ -628,6 +630,7 @@ def main(args):
     email = args.username
     esp_url = args.esp_url
     nprocesses = args.nprocesses
+    on_air = args.onair
     
     partner = args.partner
     if partner:
@@ -694,7 +697,7 @@ def main(args):
     logger.info("*"*10+" STEP 6 "+"*"*10)
     
     if not partner:
-        metadata = get_video_metadata(esp_url, access_token)
+        metadata = get_video_metadata(esp_url, access_token, on_air)
     else:
         metadata = get_video_metadata_partner(esp_url, access_token)
         
@@ -766,8 +769,16 @@ def main(args):
         for i, (streams_key, streams_item) in enumerate(streams_dict.items()):
             logger.info(str(i)+". "+ streams_key + " - URL: "+streams_item[1])
             stream_map.append(streams_key)
-        streamn = input("Choose the stream you want: ")
-        streamn = int(streamn)
+            
+        while True:
+            streamn = input("Choose the stream you want: ")
+            try:
+                streamn = int(streamn)
+            except ValueError:
+                print("Invalid input")
+            else:
+                break
+                
         key_to_use = stream_map[streamn]
         args.resolution = streams_key
 
@@ -840,7 +851,10 @@ if __name__=="__main__":
     parser.add_argument('--nprocesses', type=int, help='Number of parallel processes to use', default=1)
 
     parser.add_argument('--verbose', help='Show more messages', action='store_true')
-    parser.add_argument('--partner', help='EXPERIMENTAL', action='store_true')
+    
+    parser.add_argument('--partner', help='EXPERIMENTAL - Use this if the video is of a partner', action='store_true')
+    parser.add_argument('--onair', help='EXPERIMENTAL - Use this if the video is on air', action='store_true')
+    
     parser.add_argument('--debug', help='Show debug messages', action='store_true')
 
     load_group = parser.add_mutually_exclusive_group(required=True)
