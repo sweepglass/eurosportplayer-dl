@@ -16,12 +16,13 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
     
+from Crypto.Cipher import AES
+
 import ctypes
 import requests
 import json
 import base64
 from collections import OrderedDict
-from Crypto.Cipher import AES
 import re
 import os
 import urllib
