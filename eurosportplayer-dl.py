@@ -18,6 +18,7 @@
     
 from Crypto.Cipher import AES
 
+import copy
 import ctypes
 import requests
 import json
@@ -231,8 +232,7 @@ def get_master_file(esp_url, metadata, authorization):
 def decrypt_stream(ciphertext, key, IV, ofn):
     logger = logging.getLogger('eurosport-dl')
     mode = AES.MODE_CBC
-    #logger.debug("ciphertext='{}'".format(ciphertext))
-    logger.debug("AES: key='{}' ({}), mode='{}' ({}), IV='{}' ({})".format(key,type(key),mode,type(mode),IV,type(IV)))
+    #logger.debug("AES: key='{}' ({}), mode='{}' ({}), IV='{}' ({})".format(key,type(key),mode,type(mode),IV,type(IV)))
     decryptor = AES.new(key, mode, IV=IV)
     plain = decryptor.decrypt(ciphertext)
     with open(ofn, 'wb') as fileh:
@@ -278,7 +278,6 @@ def get_key(esp_url, key_url, authorization):
 def download_file(url, fn):
     logger = logging.getLogger('eurosport-dl')
     logger.debug("Downloading '{}' -> '{}'".format(url, fn))
-
     r = requests.get(url)
     with open(fn, 'wb') as fd:
         for chunk in r.iter_content(chunk_size=128):
@@ -577,7 +576,6 @@ def check_ffmpeg():
     try:
         subprocess.call( ['ffmpeg','-version'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     except FileNotFoundError as error:
-        a = 1
         return False
     else:
         #In Python, using the else statement, you can instruct a program to execute a certain block of code only in the absence of exceptions.In Python, using the else statement, you can instruct a program to execute a certain block of code only in the absence of exceptions.
@@ -616,8 +614,12 @@ def setup_loggers():
     logger.addHandler(ch)
 
 def main(args):
-
+    
+    # Ensure we are running it using Python 3
+    assert sys.version_info[0] >= 3
+    
     logger = logging.getLogger('eurosport-dl')
+    logger.debug("Python version: "+sys.version)
 
     if not check_ffmpeg():
         while True:
@@ -625,7 +627,7 @@ def main(args):
             if resp == "Y":
                 break
             elif resp=="N":
-                exit()
+                sys.exit()
             logger.error("Invalid response")
 
     email = args.username
@@ -845,7 +847,7 @@ if __name__=="__main__":
     logger = logging.getLogger('eurosport-dl')
 
     parser = argparse.ArgumentParser(description='Download videos from eurosportplayer.com')
-    parser.add_argument('--user', '-u', '--username', dest='username', help='Username (typically an e-mail address) of the eurosportplayer account')
+    parser.add_argument('--username', '-u', dest='username', help='Username (typically an e-mail address) of the eurosportplayer account')
     parser.add_argument('--password', '-p', dest='password', help='Password of the eurosportplayer account')
     parser.add_argument('--resolution', '-r', default='c', help='Resolution of the video to download')
 
@@ -867,9 +869,16 @@ if __name__=="__main__":
     continue_group.add_argument('--overwrite', action='store_true', help='Delete the previous download')
 
     args = parser.parse_args()
+    
+    # Write arguments to debug output
+    args_dbg = copy.deepcopy(vars(args))
+    args_dbg['username'] = args_dbg['password'] = "***"
+    logger.debug("Command line arguments: ")
+    logger.debug(json.dumps(args_dbg, sort_keys=True, indent='\t'))
 
     debug = args.debug
 
+    # Load session file
     if (args.load):
         if(args.verbose):
             logger.info("Reading session file")
@@ -882,7 +891,7 @@ if __name__=="__main__":
             exit()
         args2.password = args.password
         main(args2)
-
+    # Create a new session
     else:
         main(args)
 
