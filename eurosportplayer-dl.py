@@ -304,7 +304,7 @@ def proc_playlist(esp_url, plfn, base_frame_url, access_token, args, frames_coun
         for line in plfh:
             if (line.find("404 Not Found") != -1) or (line.find("Not Found") != -1):
                 logger.error("Error 404: This video is not available for download")
-                exit()
+                sys.exit()
 
             # Decryption key found
             if line.startswith("#EXT-X-KEY:"):
@@ -340,7 +340,7 @@ def proc_playlist(esp_url, plfn, base_frame_url, access_token, args, frames_coun
                         frames_counter.increment()
                     else:
                         logger.error("ERROR: frame already present and --continue argument was not passed. This should not happen!")
-                        exit()
+                        sys.exit()
                 else:
                     #add the frame to the list of frames to download
                     frame_url = base_frame_url + line.strip()
@@ -491,7 +491,7 @@ def get_auth_id_token(access_token, user_agent, email, password):
         err_code = rj["errors"][0]["code"]
         logger.error("AN ERROR OCCURRED")
         logger.error("Error code: {}\nError description: {}".format(err_code, err_desc))
-        exit()
+        sys.exit()
 
     id_token = r.json()['id_token']
     return id_token
@@ -643,7 +643,7 @@ def main(args):
         password = args.password
     except AttributeError:
         logger.error("You need to provide a password for the account")
-        exit()
+        sys.exit()
 
     if args.overwrite:
         assert(args.continuedown is False)
@@ -662,7 +662,7 @@ def main(args):
             os.makedirs("./download/videos", exist_ok=False)
         except FileExistsError:
             logger.error("It looks like you have downloaded some video chunks. You need to decide whether to resume the previous download, or to remove the files of the old download in order to start a new one. Exiting")
-            exit()
+            sys.exit()
 
     #*********************************************************#
     # 1. Get clientApiKey
@@ -732,7 +732,7 @@ def main(args):
             if(resolution is None):
                 logger.error("ERROR: resolution is none")
                 logger.error(line)
-                exit()
+                sys.exit()
             resolution = resolution.group(1)
             logger.error("Found resolution: "+str(resolution))
 
@@ -804,7 +804,7 @@ def main(args):
     local_playlist_file = "./download/stream/"+playlist_name
     if not os.path.isfile(local_playlist_file):
         logger.error("Playlist file not found: {}".format(local_playlist_file))
-        exit()
+        sys.exit()
 
     # Get stream playlist
     logger.debug("Playlist name: "+playlist_name)
@@ -888,11 +888,10 @@ if __name__=="__main__":
         args2.overwrite = False
         if(args.password is None):
             logger.error("If you use the --load option, you still need to provide a password for the account using the --password option, since the password is not stored in the session file")
-            exit()
+            sys.exit()
         args2.password = args.password
         main(args2)
     # Create a new session
     else:
         main(args)
 
-    exit()
