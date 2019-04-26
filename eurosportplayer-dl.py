@@ -16,6 +16,7 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
     
+# From PyCryptodome
 from Crypto.Cipher import AES
 
 import copy
