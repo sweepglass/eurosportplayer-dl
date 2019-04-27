@@ -29,7 +29,7 @@ Use `NUM` parallel processes. Defaults to 1
 
 - `--resolution AxB`
 
-Download the resolution `AxB`. Returns an error if a video stream with that resolution is not found. Defaults to 1280x760
+Download the resolution `AxB`. Returns an error if a video stream with that resolution is not found. If this parameter is not passed, the software will ask the user which resolution to download from a list of available resolutions for that stream.
 
 - `--load`
 
