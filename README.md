@@ -2,9 +2,11 @@
 Download videos of games from eurosportplayer.com
 
 ## Windows binary
-On the [release](https://github.com/raffam/eurosportplayer-dl/releases) page, there is a binary release for Windows. There should be no additional requirements to run the software from this release.
-
-*Note that these releases are generally behind the source code release.*
+The Windows binaries are currently broken,
+and will stay so for the foreseeable future.
+If you want to run the script on Windows,
+you need to install Python and run it 
+from the source code.
 
 ## Source code Requirements
 In order yo run the script from the source code, a [Python 3](http://www.python.org) interpreter is required. Moreover, some Python packages are required too. You can install them using pip:
