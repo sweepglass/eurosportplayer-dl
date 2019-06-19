@@ -2,7 +2,7 @@
 Download videos of games from eurosportplayer.com
 
 ## Windows binary
-The Windows binaries are currently broken,
+The Windows binaries are currently broken due to a bug in PyInstaller,
 and will stay so for the foreseeable future.
 If you want to run the script on Windows,
 you need to install Python and run it 
